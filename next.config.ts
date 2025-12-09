@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: (() => {
-      const patterns = [
+      const patterns: { protocol: "https"; hostname: string; pathname: string }[] = [
         {
           protocol: "https",
           hostname: "storage.googleapis.com",

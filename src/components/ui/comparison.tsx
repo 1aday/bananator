@@ -30,7 +30,13 @@ export function Comparison({
   const beforeImage = before || firstImage;
   const afterImage = after || secondImage;
   const [position, setPosition] = React.useState(initialPosition);
+  const [imageLoaded, setImageLoaded] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Reset loaded state when images change
+  React.useEffect(() => {
+    setImageLoaded(false);
+  }, [afterImage]);
 
   const updatePosition = React.useCallback((clientX: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -59,7 +65,7 @@ export function Comparison({
     <div
       ref={containerRef}
       className={cn(
-        "relative isolate h-full w-full overflow-hidden rounded-lg bg-black/40 touch-none",
+        "relative isolate w-full overflow-hidden rounded-lg bg-zinc-800 touch-none",
         className
       )}
       onPointerDown={(e) => updatePosition(e.clientX)}
@@ -67,39 +73,56 @@ export function Comparison({
       onTouchMove={handleTouchMove}
       {...props}
     >
-      {/* After image as background (visible on the right) */}
+      {/* Loading placeholder */}
+      {!imageLoaded && (
+        <div className="w-full aspect-video flex items-center justify-center bg-zinc-800 animate-pulse">
+          <div className="w-8 h-8 border-2 border-lime-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {/* After image - determines container height */}
       {afterImage && (
         <img
           src={afterImage}
           alt="After"
-          className={cn("absolute inset-0 h-full w-full object-cover", secondImageClassname)}
+          className={cn(
+            "w-full h-auto block transition-opacity duration-300",
+            imageLoaded ? "opacity-100" : "opacity-0 absolute",
+            secondImageClassname
+          )}
           draggable={false}
+          onLoad={() => setImageLoaded(true)}
         />
       )}
-      {/* Before image clipped (visible on the left) */}
-      <div
-        className="absolute inset-0 overflow-hidden"
-        style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
-      >
-        {beforeImage && (
-          <img
-            src={beforeImage}
-            alt="Before"
-            className={cn("h-full w-full object-cover", firstImageClassName)}
-            draggable={false}
-          />
-        )}
-      </div>
-
-      <div
-        className="absolute inset-y-0 pointer-events-none"
-        style={{ left: `${position}%`, transform: "translateX(-50%)" }}
-      >
-        <div className="h-full w-px bg-white/80 shadow-[0_0_12px_rgba(0,0,0,0.45)]" />
-        <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/70 text-white shadow-lg border border-white/30">
-          ⇆
+      
+      {/* Before image clipped (visible on the left) - positioned absolutely */}
+      {imageLoaded && (
+        <div
+          className="absolute inset-0 overflow-hidden"
+          style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
+        >
+          {beforeImage && (
+            <img
+              src={beforeImage}
+              alt="Before"
+              className={cn("w-full h-full object-cover", firstImageClassName)}
+              draggable={false}
+            />
+          )}
         </div>
-      </div>
+      )}
+
+      {imageLoaded && (
+        <div
+          className="absolute inset-y-0 pointer-events-none"
+          style={{ left: `${position}%`, transform: "translateX(-50%)" }}
+        >
+          <div className="h-full w-px bg-white/80 shadow-[0_0_12px_rgba(0,0,0,0.45)]" />
+          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/70 text-white shadow-lg border border-white/30">
+            ⇆
+          </div>
+        </div>
+      )}
     </div>
   );
 }

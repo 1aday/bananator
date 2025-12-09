@@ -725,14 +725,14 @@ export default function ProjectWorkspace() {
                     </div>
                     <div className="relative">
                       {gen.loading ? (
-                        <div className="aspect-square bg-zinc-800 rounded-xl flex items-center justify-center">
+                        <div className="min-h-[200px] bg-zinc-800 rounded-xl flex items-center justify-center">
                           <div className="flex flex-col items-center gap-2">
                             <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
                             <p className="text-sm text-zinc-400">Creating...</p>
                           </div>
                         </div>
                       ) : gen.error ? (
-                        <div className="aspect-square bg-zinc-800 rounded-xl flex items-center justify-center">
+                        <div className="min-h-[200px] bg-zinc-800 rounded-xl flex items-center justify-center">
                           <div className="text-center p-4">
                             <p className="text-red-400 mb-3 text-sm">{gen.error}</p>
                             <button onClick={() => retry(gen)} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm flex items-center gap-2 mx-auto">
@@ -742,10 +742,18 @@ export default function ProjectWorkspace() {
                         </div>
                       ) : gen.inputImage && gen.outputImage ? (
                         <div className="cursor-pointer" onClick={() => setFullView(gen)}>
-                          <Comparison before={gen.inputImage} after={gen.outputImage} className="aspect-square rounded-xl" />
+                          <Comparison before={gen.inputImage} after={gen.outputImage} className="rounded-xl" />
                         </div>
                       ) : gen.outputImage ? (
-                        <img src={gen.outputImage} alt={gen.prompt} className="w-full rounded-xl cursor-pointer" onClick={() => setFullView(gen)} />
+                        <div className="relative bg-zinc-800 rounded-xl overflow-hidden">
+                          <img 
+                            src={gen.outputImage} 
+                            alt={gen.prompt} 
+                            className="w-full rounded-xl cursor-pointer block" 
+                            onClick={() => setFullView(gen)}
+                            loading="eager"
+                          />
+                        </div>
                       ) : null}
                     </div>
                     {gen.outputImage && !gen.loading && (
