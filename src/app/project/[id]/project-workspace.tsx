@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { saveGeneratedImage, getProject, getGeneratedImages, deleteGeneratedImage, type Project } from "@/lib/supabase";
 import { PromptLibrary } from "@/components/prompt-library";
 import { Comparison } from "@/components/ui/comparison";
-import { Spinner, LoadingCard, ImageSkeleton } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Upload,
   Sparkles,
