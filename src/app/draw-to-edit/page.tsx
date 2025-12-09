@@ -578,11 +578,41 @@ export default function DrawToEdit() {
   if (projectLoading) {
     return (
       <div className="h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">🍌</span>
+        <div className="relative flex flex-col items-center gap-6">
+          {/* Ambient glow */}
+          <div className="absolute inset-0 bg-lime-400/5 blur-[100px] rounded-full scale-150" />
+          
+          {/* Main loader */}
+          <div className="relative">
+            {/* Expanding rings */}
+            <div className="absolute inset-[-20px] rounded-full border border-lime-400/10 animate-[ring-expand_2s_ease-out_infinite]" />
+            <div className="absolute inset-[-20px] rounded-full border border-lime-400/10 animate-[ring-expand_2s_ease-out_infinite_0.5s]" />
+            
+            {/* Icon container */}
+            <div className="relative w-20 h-20 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-700/50 shadow-xl animate-[glow-pulse_3s_ease-in-out_infinite]">
+              <span className="text-4xl animate-[float_2s_ease-in-out_infinite]">🍌</span>
+            </div>
           </div>
-          <Loader2 className="w-6 h-6 text-lime-400 animate-spin mx-auto" />
+          
+          {/* Text */}
+          <div className="text-center animate-[fade-in-up_0.5s_ease-out]">
+            <p className="text-sm font-medium text-white mb-1">Loading editor</p>
+            <p className="text-xs text-zinc-500">Preparing your canvas...</p>
+          </div>
+          
+          {/* Dots */}
+          <div className="flex items-center gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-lime-400"
+                style={{
+                  animation: "dot-bounce 1.4s infinite ease-in-out both",
+                  animationDelay: `${i * 0.16}s`,
+                }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     );

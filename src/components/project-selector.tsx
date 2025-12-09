@@ -223,8 +223,13 @@ export function ProjectSelector({
           </h2>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 text-lime-400 animate-spin" />
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              {/* Elegant spinner */}
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full bg-lime-400/10 blur-md animate-pulse" />
+                <div className="w-8 h-8 rounded-full border-2 border-zinc-700 border-t-lime-400 border-r-lime-400/40 animate-spin" />
+              </div>
+              <p className="text-xs text-zinc-500">Loading projects...</p>
             </div>
           ) : projects.length === 0 ? (
             <div className="text-center py-12 text-zinc-500">

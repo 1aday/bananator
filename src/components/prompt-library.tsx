@@ -302,7 +302,14 @@ export function PromptLibrary({
         <div className="flex-1 overflow-hidden flex">
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
+              <div className="flex flex-col items-center gap-4">
+                {/* Elegant spinner */}
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-lime-400/10 blur-md animate-pulse" />
+                  <div className="w-10 h-10 rounded-full border-2 border-zinc-700 border-t-lime-400 border-r-lime-400/40 animate-spin" />
+                </div>
+                <p className="text-xs text-zinc-500">Loading prompts...</p>
+              </div>
             </div>
           ) : activeTab === "popular" ? (
             /* Popular Templates */
