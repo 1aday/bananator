@@ -32,6 +32,7 @@ import {
   ChevronUp,
   Image as ImageLucide,
   Home,
+  Columns,
 } from "lucide-react";
 
 type AspectRatio = "auto" | "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9" | "match_input_image";
@@ -102,6 +103,7 @@ export default function ProjectWorkspace() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [fullView, setFullView] = useState<GenerationItem | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showBeforeAfter, setShowBeforeAfter] = useState(true); // Toggle for before/after comparison in feed
   // Mobile: bottom sheet expanded state
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const [mobileShowModel, setMobileShowModel] = useState(false);
@@ -325,6 +327,9 @@ export default function ProjectWorkspace() {
               : g
           )
         );
+        
+        // Mark as loaded immediately so we don't show spinner for fresh generations
+        setLoadedImages(prev => new Set(prev).add(savedId));
       } catch (err) {
         setGenerations(prev =>
           prev.map(g =>
@@ -712,6 +717,16 @@ export default function ProjectWorkspace() {
             >
               {sidebarCollapsed ? <PanelLeft className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
             </button>
+            <button 
+              onClick={() => setShowBeforeAfter(!showBeforeAfter)} 
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                showBeforeAfter ? "text-lime-400 bg-lime-400/10" : "text-zinc-500 hover:text-white hover:bg-white/5"
+              )}
+              title={showBeforeAfter ? "Hide before/after comparison" : "Show before/after comparison"}
+            >
+              <Columns className="w-5 h-5" />
+            </button>
             <button onClick={() => setShowPromptLibrary(true)} className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Prompt Library">
               <BookOpen className="w-5 h-5" />
             </button>
@@ -746,10 +761,30 @@ export default function ProjectWorkspace() {
                     </div>
                     <div className="relative">
                       {gen.loading ? (
-                        <div className="min-h-[200px] bg-zinc-800 rounded-xl flex items-center justify-center">
-                          <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
-                            <p className="text-sm text-zinc-400">Creating...</p>
+                        <div className="min-h-[240px] bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-800 rounded-xl flex items-center justify-center relative overflow-hidden">
+                          {/* Animated background shimmer */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                          
+                          <div className="flex flex-col items-center gap-4 z-10">
+                            {/* Animated emoji with pulse ring */}
+                            <div className="relative">
+                              <div className="absolute inset-0 bg-lime-400/20 rounded-full animate-ping" />
+                              <div className="absolute inset-[-8px] bg-lime-400/10 rounded-full animate-pulse" />
+                              <div className="relative w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center border border-lime-400/20 shadow-lg shadow-lime-400/10">
+                                <span className="text-3xl animate-bounce">🍌</span>
+                              </div>
+                            </div>
+                            
+                            {/* Text with typing dots */}
+                            <div className="text-center">
+                              <p className="text-sm font-medium text-white mb-1">Creating your masterpiece</p>
+                              <p className="text-xs text-zinc-500">This could take up to 45 seconds</p>
+                            </div>
+                            
+                            {/* Progress bar animation */}
+                            <div className="w-32 h-1 bg-zinc-700 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-lime-400 to-lime-300 rounded-full animate-[progress_3s_ease-in-out_infinite]" />
+                            </div>
                           </div>
                         </div>
                       ) : gen.error ? (
@@ -761,7 +796,7 @@ export default function ProjectWorkspace() {
                             </button>
                           </div>
                         </div>
-                      ) : gen.inputImage && gen.outputImage ? (
+                      ) : gen.inputImage && gen.outputImage && showBeforeAfter ? (
                         <div className="cursor-pointer" onClick={() => setFullView(gen)}>
                           <Comparison before={gen.inputImage} after={gen.outputImage} className="rounded-xl" />
                         </div>
@@ -772,10 +807,16 @@ export default function ProjectWorkspace() {
                         )}>
                           {/* Show loading spinner while image is downloading */}
                           {!loadedImages.has(gen.id) && (
-                            <div className="absolute inset-0 flex items-center justify-center z-10">
-                              <div className="flex flex-col items-center gap-2">
-                                <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
-                                <p className="text-sm text-zinc-400">Loading image...</p>
+                            <div className="absolute inset-0 flex items-center justify-center z-10 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-800">
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                              <div className="flex flex-col items-center gap-3 z-10">
+                                <div className="relative">
+                                  <div className="w-12 h-12 border-2 border-lime-400/30 border-t-lime-400 rounded-full animate-spin" />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-lg">✨</span>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-zinc-400">Almost there...</p>
                               </div>
                             </div>
                           )}
@@ -831,7 +872,7 @@ export default function ProjectWorkspace() {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40">
         {/* Backdrop when expanded */}
         {mobileSheetExpanded && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm -z-10" onClick={() => setMobileSheetExpanded(false)} />
+          <div className="fixed inset-0 bg-black/60 -z-10" onClick={() => setMobileSheetExpanded(false)} />
         )}
         
         <div className={cn(
@@ -1092,19 +1133,13 @@ export default function ProjectWorkspace() {
             className="max-w-5xl max-h-[75vh] lg:max-h-[85vh] w-full flex-1 flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
           >
-            {fullView.inputImage && fullView.outputImage ? (
-              <Comparison
-                before={fullView.inputImage}
-                after={fullView.outputImage}
-                className="w-full h-full rounded-xl overflow-hidden"
-              />
-            ) : fullView.outputImage ? (
+            {fullView.outputImage && (
               <img
                 src={fullView.outputImage}
                 alt={fullView.prompt}
                 className="max-w-full max-h-[70vh] lg:max-h-[80vh] mx-auto rounded-xl object-contain"
               />
-            ) : null}
+            )}
           </div>
 
           <div className="mt-3 lg:mt-4 flex items-center justify-center gap-2 lg:gap-3 w-full px-4 lg:px-0">

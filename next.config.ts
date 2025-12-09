@@ -3,9 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: (() => {
-      const patterns: { protocol: "https"; hostname: string; pathname: string }[] = [
+      const patterns = [
         {
-          protocol: "https",
+          protocol: "https" as const,
           hostname: "storage.googleapis.com",
           pathname: "/**",
         },
@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
             process.env.NEXT_PUBLIC_SUPABASE_URL
           ).hostname;
           patterns.push({
-            protocol: "https",
+            protocol: "https" as const,
             hostname,
             pathname: "/**",
           });
