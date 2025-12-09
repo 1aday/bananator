@@ -800,7 +800,6 @@ export default function DrawToEdit() {
                     className="aspect-video"
                     firstImageClassName="object-cover"
                     secondImageClassname="object-cover"
-                    slideMode="hover"
                   />
                   <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                     <div className="flex items-center gap-2">

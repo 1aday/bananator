@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "./database.types";
+import type { Database, PromptCategory, PromptTemplate } from "./database.types";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabasePublicKey =
@@ -307,17 +307,17 @@ export async function deleteGeneratedImage(id: string) {
 }
 
 // Helper functions for prompt library
-export async function getPromptCategories() {
+export async function getPromptCategories(): Promise<PromptCategory[]> {
   const { data, error } = await supabase
     .from("prompt_categories")
     .select("*, prompt_templates(*)")
     .order("name");
 
   if (error) throw error;
-  return data;
+  return (data || []) as unknown as PromptCategory[];
 }
 
-export async function getPromptTemplates(categoryId?: string) {
+export async function getPromptTemplates(categoryId?: string): Promise<PromptTemplate[]> {
   let query = supabase
     .from("prompt_templates")
     .select("*, prompt_categories(name, icon)")
@@ -329,7 +329,7 @@ export async function getPromptTemplates(categoryId?: string) {
 
   const { data, error } = await query;
   if (error) throw error;
-  return data;
+  return (data || []) as unknown as PromptTemplate[];
 }
 
 export async function incrementPromptUseCount(id: string) {
