@@ -106,6 +106,13 @@ export default function ProjectWorkspace() {
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const [mobileShowModel, setMobileShowModel] = useState(false);
   const [mobileShowSettings, setMobileShowSettings] = useState(false);
+  // Track which images have loaded in the browser
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+  
+  // Mark image as loaded when browser finishes loading it
+  const handleImageLoaded = useCallback((id: string) => {
+    setLoadedImages(prev => new Set(prev).add(id));
+  }, []);
 
   // Load project and images
   useEffect(() => {
@@ -135,6 +142,11 @@ export default function ProjectWorkspace() {
             // Sort by timestamp ascending (oldest first, newest at bottom)
             existingGenerations.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
             setGenerations(existingGenerations);
+            
+            // Pre-mark all existing images as "loaded" so they don't show loading spinner
+            // (they'll re-validate on actual render via onLoad if needed)
+            const existingIds = new Set(existingGenerations.filter(g => g.outputImage).map(g => g.id));
+            setLoadedImages(existingIds);
           }
         } else {
           router.push("/");
@@ -754,13 +766,29 @@ export default function ProjectWorkspace() {
                           <Comparison before={gen.inputImage} after={gen.outputImage} className="rounded-xl" />
                         </div>
                       ) : gen.outputImage ? (
-                        <div className="relative bg-zinc-800 rounded-xl overflow-hidden">
+                        <div className={cn(
+                          "relative bg-zinc-800 rounded-xl overflow-hidden",
+                          !loadedImages.has(gen.id) && "min-h-[200px]"
+                        )}>
+                          {/* Show loading spinner while image is downloading */}
+                          {!loadedImages.has(gen.id) && (
+                            <div className="absolute inset-0 flex items-center justify-center z-10">
+                              <div className="flex flex-col items-center gap-2">
+                                <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
+                                <p className="text-sm text-zinc-400">Loading image...</p>
+                              </div>
+                            </div>
+                          )}
                           <img 
                             src={gen.outputImage} 
                             alt={gen.prompt} 
-                            className="w-full rounded-xl cursor-pointer block" 
+                            className={cn(
+                              "w-full rounded-xl cursor-pointer block transition-opacity duration-300",
+                              loadedImages.has(gen.id) ? "opacity-100" : "opacity-0"
+                            )} 
                             onClick={() => setFullView(gen)}
                             loading="eager"
+                            onLoad={() => handleImageLoaded(gen.id)}
                           />
                         </div>
                       ) : null}
