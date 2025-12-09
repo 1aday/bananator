@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,14 @@ type FlowState = {
 };
 
 export default function VideoFlowPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Loader2 className="w-8 h-8 text-lime-400 animate-spin" /></div>}>
+      <VideoFlowPageContent />
+    </Suspense>
+  );
+}
+
+function VideoFlowPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -391,40 +399,13 @@ export default function VideoFlowPage() {
   if (projectLoading) {
     return (
       <div className="h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="relative flex flex-col items-center gap-6">
-          {/* Ambient glow */}
-          <div className="absolute inset-0 bg-lime-400/5 blur-[100px] rounded-full scale-150" />
-          
-          {/* Main loader */}
-          <div className="relative">
-            {/* Expanding rings */}
-            <div className="absolute inset-[-20px] rounded-full border border-lime-400/10 animate-[ring-expand_2s_ease-out_infinite]" />
-            <div className="absolute inset-[-20px] rounded-full border border-lime-400/10 animate-[ring-expand_2s_ease-out_infinite_0.5s]" />
-            
-            {/* Icon container */}
-            <div className="relative w-20 h-20 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-700/50 shadow-xl animate-[glow-pulse_3s_ease-in-out_infinite]">
-              <span className="text-4xl animate-[float_2s_ease-in-out_infinite]">🍌</span>
-            </div>
+        <div className="flex flex-col items-center gap-5">
+          <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-800">
+            <span className="text-2xl">🍌</span>
           </div>
-          
-          {/* Text */}
-          <div className="text-center animate-[fade-in-up_0.5s_ease-out]">
-            <p className="text-sm font-medium text-white mb-1">Loading video studio</p>
-            <p className="text-xs text-zinc-500">Setting up your workspace...</p>
-          </div>
-          
-          {/* Dots */}
-          <div className="flex items-center gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-lime-400"
-                style={{
-                  animation: "dot-bounce 1.4s infinite ease-in-out both",
-                  animationDelay: `${i * 0.16}s`,
-                }}
-              />
-            ))}
+          <div className="relative w-8 h-8">
+            <div className="absolute inset-0 rounded-full border-2 border-zinc-800" />
+            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
           </div>
         </div>
       </div>

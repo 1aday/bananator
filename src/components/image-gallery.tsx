@@ -122,13 +122,9 @@ export function ImageGallery({
         <div className="flex-1 overflow-hidden flex">
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-4">
-                {/* Elegant spinner */}
-                <div className="relative">
-                  <div className="absolute inset-0 rounded-full bg-lime-400/10 blur-md animate-pulse" />
-                  <div className="w-10 h-10 rounded-full border-2 border-zinc-700 border-t-lime-400 border-r-lime-400/40 animate-spin" />
-                </div>
-                <p className="text-xs text-zinc-500">Loading gallery...</p>
+              <div className="relative w-8 h-8">
+                <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
+                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
               </div>
             </div>
           ) : images.length === 0 ? (

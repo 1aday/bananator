@@ -349,7 +349,13 @@ export async function POST(request: NextRequest) {
 
     if (selectedModel === "nano-banana-pro") {
       // Use nano-banana-pro/edit for image-to-image editing
-      imageUrls = await ensureImageUrls(imageInputs?.slice(0, 10) || [], compressImages);
+      if (!hasImages) {
+        return NextResponse.json(
+          { error: "At least one image is required for nano-banana-pro edit mode" },
+          { status: 400 }
+        );
+      }
+      imageUrls = await ensureImageUrls(imageInputs.slice(0, 10), compressImages);
 
       falResponse = await fetch(
         "https://fal.run/fal-ai/nano-banana-pro/edit",

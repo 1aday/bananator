@@ -389,45 +389,20 @@ export default function ProjectWorkspace() {
 
   const aspectRatioOptions = getAspectRatioOptions();
 
-  // Loading state - World-class full page loader
+  // Loading state - Clean & minimal
   if (projectLoading) {
     return (
       <div className="h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="relative flex flex-col items-center gap-6">
-          {/* Ambient glow */}
-          <div className="absolute inset-0 bg-lime-400/5 blur-[100px] rounded-full scale-150" />
-          
-          {/* Main loader */}
-          <div className="relative">
-            {/* Expanding rings */}
-            <div className="absolute inset-[-20px] rounded-full border border-lime-400/10 animate-[ring-expand_2s_ease-out_infinite]" />
-            <div className="absolute inset-[-20px] rounded-full border border-lime-400/10 animate-[ring-expand_2s_ease-out_infinite_0.5s]" />
-            <div className="absolute inset-[-20px] rounded-full border border-lime-400/10 animate-[ring-expand_2s_ease-out_infinite_1s]" />
-            
-            {/* Icon container with glow */}
-            <div className="relative w-20 h-20 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-700/50 shadow-xl animate-[glow-pulse_3s_ease-in-out_infinite]">
-              <span className="text-4xl animate-[float_2s_ease-in-out_infinite]">🍌</span>
-            </div>
+        <div className="flex flex-col items-center gap-5">
+          {/* Logo */}
+          <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-800">
+            <span className="text-2xl">🍌</span>
           </div>
           
-          {/* Text */}
-          <div className="text-center animate-[fade-in-up_0.5s_ease-out]">
-            <p className="text-sm font-medium text-white mb-1">Loading workspace</p>
-            <p className="text-xs text-zinc-500">Preparing your creative space...</p>
-          </div>
-          
-          {/* Minimal spinner */}
-          <div className="flex items-center gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-lime-400"
-                style={{
-                  animation: "dot-bounce 1.4s infinite ease-in-out both",
-                  animationDelay: `${i * 0.16}s`,
-                }}
-              />
-            ))}
+          {/* Spinner */}
+          <div className="relative w-8 h-8">
+            <div className="absolute inset-0 rounded-full border-2 border-zinc-800" />
+            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
           </div>
         </div>
       </div>
@@ -793,72 +768,19 @@ export default function ProjectWorkspace() {
                     </div>
                     <div className="relative">
                       {gen.loading ? (
-                        <div className="min-h-[280px] bg-gradient-to-br from-zinc-800/90 via-zinc-900 to-zinc-800/90 rounded-xl flex items-center justify-center relative overflow-hidden border border-zinc-700/30">
-                          {/* Multiple shimmer layers for depth */}
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.02] to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-lime-400/[0.02] to-transparent translate-x-full animate-[shimmer_3s_infinite_1s]" style={{ animationDirection: 'reverse' }} />
+                        <div className="min-h-[200px] bg-zinc-900 rounded-xl flex items-center justify-center relative overflow-hidden">
+                          {/* Subtle shimmer */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.02] to-transparent animate-[shimmer_2s_infinite]" />
                           
-                          {/* Subtle grid pattern */}
-                          <div className="absolute inset-0 opacity-[0.02]" style={{ 
-                            backgroundImage: 'radial-gradient(circle, #a3e635 1px, transparent 1px)',
-                            backgroundSize: '24px 24px'
-                          }} />
-                          
-                          <div className="flex flex-col items-center gap-5 z-10 px-4">
-                            {/* Animated icon with sophisticated rings */}
-                            <div className="relative">
-                              {/* Outer glow */}
-                              <div className="absolute inset-[-16px] rounded-full bg-lime-400/5 animate-[breathe_3s_ease-in-out_infinite]" />
-                              
-                              {/* Spinning ring */}
-                              <div className="absolute inset-[-8px] rounded-full border border-lime-400/20 animate-[spin_8s_linear_infinite]" style={{
-                                borderTopColor: 'rgba(163, 230, 53, 0.4)',
-                                borderRightColor: 'rgba(163, 230, 53, 0.1)',
-                              }} />
-                              
-                              {/* Reverse spinning ring */}
-                              <div className="absolute inset-[-4px] rounded-full border border-lime-400/10 animate-[spin_6s_linear_infinite]" style={{
-                                animationDirection: 'reverse',
-                                borderBottomColor: 'rgba(163, 230, 53, 0.3)',
-                              }} />
-                              
-                              {/* Main icon container */}
-                              <div className="relative w-16 h-16 bg-gradient-to-br from-zinc-700 to-zinc-800 rounded-2xl flex items-center justify-center border border-zinc-600/50 shadow-xl shadow-black/30 animate-[glow-pulse_4s_ease-in-out_infinite]">
-                                <span className="text-3xl animate-[float_2.5s_ease-in-out_infinite]">🍌</span>
-                              </div>
+                          <div className="flex flex-col items-center gap-4">
+                            {/* Clean spinner */}
+                            <div className="relative w-10 h-10">
+                              <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
+                              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
                             </div>
                             
-                            {/* Text content */}
-                            <div className="text-center space-y-1">
-                              <p className="text-sm font-semibold text-white">Creating magic</p>
-                              <p className="text-xs text-zinc-400">This may take 30-60 seconds</p>
-                            </div>
-                            
-                            {/* Elegant progress bar */}
-                            <div className="w-36 h-1 bg-zinc-700/50 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full rounded-full animate-[progress_4s_ease-in-out_infinite]"
-                                style={{
-                                  background: 'linear-gradient(90deg, #84cc16, #a3e635, #84cc16)',
-                                  backgroundSize: '200% 100%',
-                                  animation: 'progress 4s ease-in-out infinite, gradient-flow 2s linear infinite',
-                                }}
-                              />
-                            </div>
-                            
-                            {/* Bouncing dots */}
-                            <div className="flex items-center gap-1">
-                              {[0, 1, 2].map((i) => (
-                                <div
-                                  key={i}
-                                  className="w-1 h-1 rounded-full bg-lime-400/60"
-                                  style={{
-                                    animation: "dot-bounce 1.4s infinite ease-in-out both",
-                                    animationDelay: `${i * 0.16}s`,
-                                  }}
-                                />
-                              ))}
-                            </div>
+                            {/* Simple text */}
+                            <p className="text-sm text-zinc-400">Generating...</p>
                           </div>
                         </div>
                       ) : gen.error ? (
@@ -876,34 +798,15 @@ export default function ProjectWorkspace() {
                         </div>
                       ) : gen.outputImage ? (
                         <div className={cn(
-                          "relative bg-zinc-800 rounded-xl overflow-hidden",
-                          !loadedImages.has(gen.id) && "min-h-[200px]"
+                          "relative bg-zinc-900 rounded-xl overflow-hidden",
+                          !loadedImages.has(gen.id) && "min-h-[180px]"
                         )}>
-                          {/* Show elegant loading spinner while image is downloading */}
+                          {/* Loading state */}
                           {!loadedImages.has(gen.id) && (
-                            <div className="absolute inset-0 flex items-center justify-center z-10 bg-gradient-to-br from-zinc-800/95 via-zinc-900 to-zinc-800/95 backdrop-blur-sm">
-                              {/* Shimmer effect */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent -translate-x-full animate-[shimmer_2.5s_infinite]" />
-                              
-                              <div className="flex flex-col items-center gap-4 z-10">
-                                {/* Elegant spinner */}
-                                <div className="relative">
-                                  {/* Glow */}
-                                  <div className="absolute inset-0 rounded-full bg-lime-400/10 blur-lg animate-pulse" />
-                                  
-                                  {/* Outer ring */}
-                                  <div className="w-12 h-12 rounded-full border-2 border-zinc-700 border-t-lime-400 border-r-lime-400/40 animate-spin" />
-                                  
-                                  {/* Inner ring - reverse */}
-                                  <div className="absolute inset-1 rounded-full border border-zinc-700/50 border-b-lime-300/50 animate-[spin_1.5s_linear_infinite_reverse]" />
-                                  
-                                  {/* Center sparkle */}
-                                  <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className="text-sm animate-pulse">✨</span>
-                                  </div>
-                                </div>
-                                
-                                <p className="text-xs text-zinc-400 font-medium">Almost ready...</p>
+                            <div className="absolute inset-0 flex items-center justify-center z-10 bg-zinc-900">
+                              <div className="relative w-8 h-8">
+                                <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
+                                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
                               </div>
                             </div>
                           )}
