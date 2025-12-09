@@ -236,7 +236,20 @@ export async function saveGeneratedImage(data: {
   return image;
 }
 
-export async function getGeneratedImages(projectId?: string | null, limit = 50) {
+export type GeneratedImage = {
+  id: string;
+  created_at: string;
+  project_id: string | null;
+  image_url: string;
+  prompt: string;
+  aspect_ratio: string;
+  resolution: string;
+  output_format: string;
+  safety_filter: string;
+  input_image_urls: string[];
+};
+
+export async function getGeneratedImages(projectId?: string | null, limit = 50): Promise<GeneratedImage[]> {
   let query = supabase
     .from("generated_images")
     .select("*")
@@ -253,7 +266,7 @@ export async function getGeneratedImages(projectId?: string | null, limit = 50) 
   const { data, error } = await query;
 
   if (error) throw error;
-  return data;
+  return (data || []) as GeneratedImage[];
 }
 
 export async function deleteGeneratedImage(id: string) {
