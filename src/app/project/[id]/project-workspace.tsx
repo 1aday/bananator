@@ -335,8 +335,12 @@ export default function ProjectWorkspace() {
     }
   }, []);
 
-  // Retry generation
+  // Retry generation - removes failed item and starts new generation
   const retry = useCallback((gen: GenerationItem) => {
+    // Remove the failed generation
+    setGenerations(prev => prev.filter(g => g.id !== gen.id));
+    
+    // Set up the form with the same settings
     setInputImage(gen.inputImage || null);
     setPrompt(gen.prompt);
     if (gen.aspectRatio) setAspectRatio(gen.aspectRatio as AspectRatio);
@@ -344,7 +348,12 @@ export default function ProjectWorkspace() {
       setResolution(gen.settings.resolution);
       setOutputFormat(gen.settings.outputFormat);
     }
-  }, []);
+    
+    // Trigger generation after state updates
+    setTimeout(() => {
+      generate();
+    }, 100);
+  }, [generate]);
 
   // Dynamic aspect ratio options based on model
   const getAspectRatioOptions = () => {
