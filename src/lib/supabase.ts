@@ -208,7 +208,7 @@ export async function saveGeneratedImage(data: {
     safetyFilter?: string;
   };
   inputImageUrls?: string[];
-}) {
+}): Promise<GeneratedImage> {
   if (!supabaseUrl || !supabasePublicKey) {
     throw new Error(
       "Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY environment variables."

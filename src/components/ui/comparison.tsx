@@ -73,10 +73,18 @@ export function Comparison({
       onTouchMove={handleTouchMove}
       {...props}
     >
-      {/* Loading placeholder */}
+      {/* Loading placeholder - elegant spinner */}
       {!imageLoaded && (
-        <div className="w-full aspect-video flex items-center justify-center bg-zinc-800 animate-pulse">
-          <div className="w-8 h-8 border-2 border-lime-400 border-t-transparent rounded-full animate-spin" />
+        <div className="w-full aspect-video flex items-center justify-center bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-800 relative overflow-hidden">
+          {/* Shimmer */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent -translate-x-full animate-[shimmer_2.5s_infinite]" />
+          
+          <div className="relative z-10">
+            {/* Glow */}
+            <div className="absolute inset-0 rounded-full bg-lime-400/10 blur-md animate-pulse" />
+            {/* Ring spinner */}
+            <div className="w-8 h-8 rounded-full border-2 border-zinc-700 border-t-lime-400 border-r-lime-400/40 animate-spin" />
+          </div>
         </div>
       )}
 
