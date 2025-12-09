@@ -146,10 +146,17 @@ export default function ProjectWorkspace() {
             existingGenerations.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
             setGenerations(existingGenerations);
             
-            // Pre-mark all existing images as "loaded" so they don't show loading spinner
-            // (they'll re-validate on actual render via onLoad if needed)
-            const existingIds = new Set(existingGenerations.filter(g => g.outputImage).map(g => g.id));
-            setLoadedImages(existingIds);
+            // Preload all images in parallel for faster loading
+            // This starts fetching before React even renders the img elements
+            existingGenerations.forEach((gen) => {
+              if (gen.outputImage) {
+                const img = new Image();
+                img.onload = () => {
+                  setLoadedImages(prev => new Set(prev).add(gen.id));
+                };
+                img.src = gen.outputImage;
+              }
+            });
           }
         } else {
           router.push("/");
@@ -799,14 +806,17 @@ export default function ProjectWorkspace() {
                       ) : gen.outputImage ? (
                         <div className={cn(
                           "relative bg-zinc-900 rounded-xl overflow-hidden",
-                          !loadedImages.has(gen.id) && "min-h-[180px]"
+                          !loadedImages.has(gen.id) && "min-h-[200px]"
                         )}>
                           {/* Loading state */}
                           {!loadedImages.has(gen.id) && (
                             <div className="absolute inset-0 flex items-center justify-center z-10 bg-zinc-900">
-                              <div className="relative w-8 h-8">
-                                <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
-                                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
+                              <div className="flex flex-col items-center gap-3">
+                                <div className="relative w-8 h-8">
+                                  <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
+                                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
+                                </div>
+                                <span className="text-xs text-zinc-500">Loading image...</span>
                               </div>
                             </div>
                           )}
@@ -819,6 +829,7 @@ export default function ProjectWorkspace() {
                             )} 
                             onClick={() => setFullView(gen)}
                             loading="eager"
+                            decoding="async"
                             onLoad={() => handleImageLoaded(gen.id)}
                           />
                         </div>

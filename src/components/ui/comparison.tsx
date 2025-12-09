@@ -30,13 +30,33 @@ export function Comparison({
   const beforeImage = before || firstImage;
   const afterImage = after || secondImage;
   const [position, setPosition] = React.useState(initialPosition);
-  const [imageLoaded, setImageLoaded] = React.useState(false);
+  const [beforeLoaded, setBeforeLoaded] = React.useState(false);
+  const [afterLoaded, setAfterLoaded] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  
+  const imageLoaded = beforeLoaded && afterLoaded;
 
-  // Reset loaded state when images change
+  // Preload both images in parallel when they change
   React.useEffect(() => {
-    setImageLoaded(false);
-  }, [afterImage]);
+    setBeforeLoaded(false);
+    setAfterLoaded(false);
+    
+    if (beforeImage) {
+      const img = new Image();
+      img.onload = () => setBeforeLoaded(true);
+      img.src = beforeImage;
+    } else {
+      setBeforeLoaded(true);
+    }
+    
+    if (afterImage) {
+      const img = new Image();
+      img.onload = () => setAfterLoaded(true);
+      img.src = afterImage;
+    } else {
+      setAfterLoaded(true);
+    }
+  }, [beforeImage, afterImage]);
 
   const updatePosition = React.useCallback((clientX: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -94,7 +114,8 @@ export function Comparison({
             secondImageClassname
           )}
           draggable={false}
-          onLoad={() => setImageLoaded(true)}
+          loading="eager"
+          decoding="async"
         />
       )}
       
@@ -110,6 +131,8 @@ export function Comparison({
               alt="Before"
               className={cn("w-full h-full object-cover", firstImageClassName)}
               draggable={false}
+              loading="eager"
+              decoding="async"
             />
           )}
         </div>

@@ -37,3 +37,4 @@ export function PageLoader({ className }: PageLoaderProps) {
     </div>
   );
 }
+
