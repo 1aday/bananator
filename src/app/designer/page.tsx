@@ -937,16 +937,19 @@ export default function DesignerPage() {
   // Update materials_overall for a category
   const updateMaterialsOverall = useCallback(
     (section: "shell" | "interior", categoryName: string, materials: string[]) => {
-      setDesignJSON((prev) => ({
-        ...prev,
-        [section]: {
-          ...prev[section],
-          [categoryName]: {
-            ...prev[section][categoryName as keyof typeof prev.shell],
-            materials_overall: materials,
+      setDesignJSON((prev) => {
+        const sectionData = prev[section] as Record<string, DesignCategory>;
+        return {
+          ...prev,
+          [section]: {
+            ...sectionData,
+            [categoryName]: {
+              ...sectionData[categoryName],
+              materials_overall: materials,
+            },
           },
-        },
-      }));
+        };
+      });
     },
     []
   );
@@ -955,7 +958,8 @@ export default function DesignerPage() {
   const addMaterialToCategory = useCallback(
     (section: "shell" | "interior", categoryName: string, newMaterial: string) => {
       setDesignJSON((prev) => {
-        const category = prev[section][categoryName as keyof typeof prev.shell];
+        const sectionData = prev[section] as Record<string, DesignCategory>;
+        const category = sectionData[categoryName];
         // Add to materials_overall
         const newMaterialsOverall = [...category.materials_overall, newMaterial];
         // Also add to all items' materials (if not already present)
@@ -968,7 +972,7 @@ export default function DesignerPage() {
         return {
           ...prev,
           [section]: {
-            ...prev[section],
+            ...sectionData,
             [categoryName]: {
               ...category,
               materials_overall: newMaterialsOverall,
@@ -985,7 +989,8 @@ export default function DesignerPage() {
   const removeMaterialFromCategory = useCallback(
     (section: "shell" | "interior", categoryName: string, materialToRemove: string) => {
       setDesignJSON((prev) => {
-        const category = prev[section][categoryName as keyof typeof prev.shell];
+        const sectionData = prev[section] as Record<string, DesignCategory>;
+        const category = sectionData[categoryName];
         // Remove from materials_overall
         const newMaterialsOverall = category.materials_overall.filter(
           (mat) => mat !== materialToRemove
@@ -998,7 +1003,7 @@ export default function DesignerPage() {
         return {
           ...prev,
           [section]: {
-            ...prev[section],
+            ...sectionData,
             [categoryName]: {
               ...category,
               materials_overall: newMaterialsOverall,
@@ -1015,14 +1020,15 @@ export default function DesignerPage() {
   const updateItem = useCallback(
     (section: "shell" | "interior", categoryName: string, itemId: string, updates: Partial<DesignItem>) => {
       setDesignJSON((prev) => {
-        const category = prev[section][categoryName as keyof typeof prev.shell];
+        const sectionData = prev[section] as Record<string, DesignCategory>;
+        const category = sectionData[categoryName];
         const newItems = category.items.map((item) =>
           item.id === itemId ? { ...item, ...updates } : item
         );
         return {
           ...prev,
           [section]: {
-            ...prev[section],
+            ...sectionData,
             [categoryName]: {
               ...category,
               items: newItems,
@@ -1038,12 +1044,13 @@ export default function DesignerPage() {
   const deleteItem = useCallback(
     (section: "shell" | "interior", categoryName: string, itemId: string) => {
       setDesignJSON((prev) => {
-        const category = prev[section][categoryName as keyof typeof prev.shell];
+        const sectionData = prev[section] as Record<string, DesignCategory>;
+        const category = sectionData[categoryName];
         const newItems = category.items.filter((item) => item.id !== itemId);
         return {
           ...prev,
           [section]: {
-            ...prev[section],
+            ...sectionData,
             [categoryName]: {
               ...category,
               items: newItems,
@@ -1285,7 +1292,7 @@ export default function DesignerPage() {
                 </div>
                 
                 {/* Mobile-only action buttons */}
-                <div className="flex items-center gap-1 sm:hidden">
+                <div className="flex items-center gap-2 sm:hidden">
                   {selectedRoom && hasUnsavedChanges && (
                     <button
                       onClick={saveDesign}
@@ -1301,12 +1308,23 @@ export default function DesignerPage() {
                   )}
                   <button
                     onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-xl font-medium text-sm transition-all",
+                      sidebarCollapsed 
+                        ? "bg-lime-400 text-black shadow-lg shadow-lime-400/20" 
+                        : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                    )}
                   >
                     {sidebarCollapsed ? (
-                      <PanelRight className="w-5 h-5" />
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        Design
+                      </>
                     ) : (
-                      <PanelRightClose className="w-5 h-5" />
+                      <>
+                        <X className="w-4 h-4" />
+                        Close
+                      </>
                     )}
                   </button>
                 </div>
