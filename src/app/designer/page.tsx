@@ -592,7 +592,7 @@ export default function DesignerPage() {
   const [isRenderingImage, setIsRenderingImage] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
 
-  // Fetch projects on mount
+  // Fetch projects on mount and check for pre-selected project
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -600,6 +600,17 @@ export default function DesignerPage() {
         if (response.ok) {
           const data = await response.json();
           setProjects(data);
+          
+          // Check for pre-selected project from home page
+          const preSelectedId = localStorage.getItem("banana_designer_project_id");
+          if (preSelectedId) {
+            const preSelectedProject = data.find((p: Project) => p.id === preSelectedId);
+            if (preSelectedProject) {
+              setSelectedProject(preSelectedProject);
+            }
+            // Clear the stored ID after using it
+            localStorage.removeItem("banana_designer_project_id");
+          }
         }
       } catch (error) {
         console.error("Error fetching projects:", error);

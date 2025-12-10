@@ -16,18 +16,25 @@ import {
   Clock,
   ChevronRight,
   X,
+  ArrowLeft,
+  Lightbulb,
+  Palette,
 } from "lucide-react";
 
 type ProjectSelectorProps = {
   onSelectProject: (project: Project) => void;
   currentProjectId?: string | null;
   onClose?: () => void;
+  mode?: "ideate" | "design" | null;
+  onBack?: () => void;
 };
 
 export function ProjectSelector({
   onSelectProject,
   currentProjectId,
   onClose,
+  mode,
+  onBack,
 }: ProjectSelectorProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,8 +114,38 @@ export function ProjectSelector({
     return date.toLocaleDateString();
   };
 
+  // Mode config for styling
+  const modeConfig = {
+    ideate: {
+      icon: Lightbulb,
+      color: "amber",
+      label: "Ideate",
+      description: "Generate and explore AI images",
+    },
+    design: {
+      icon: Palette,
+      color: "violet", 
+      label: "Design",
+      description: "AI-assisted interior design",
+    },
+  };
+
+  const currentMode = mode ? modeConfig[mode] : null;
+  const ModeIcon = currentMode?.icon;
+
   return (
     <div className="fixed inset-0 z-50 bg-zinc-950 flex items-center justify-center p-4">
+      {/* Back button when mode is selected */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="absolute top-4 left-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors z-10"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back</span>
+        </button>
+      )}
+      
       {/* Close button when switching projects */}
       {onClose && (
         <button
@@ -122,16 +159,31 @@ export function ProjectSelector({
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-8">
+          {/* Mode badge */}
+          {currentMode && ModeIcon && (
+            <div className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4",
+              currentMode.color === "amber" ? "bg-amber-500/10 text-amber-400" : "bg-violet-500/10 text-violet-400"
+            )}>
+              <ModeIcon className="w-4 h-4" />
+              <span className="text-sm font-medium">{currentMode.label}</span>
+            </div>
+          )}
+          
           <div className="w-20 h-20 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">🍌</span>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">
-            {onClose ? "Switch Project" : "Welcome to Banana"}
+            {onClose ? "Switch Project" : "Select a Project"}
           </h1>
           <p className="text-zinc-400">
             {onClose 
               ? "Select a different project or create a new one"
-              : "Select a project to continue, or create a new one"
+              : currentMode 
+                ? mode === "ideate" 
+                  ? "Choose a project to start generating images"
+                  : "Choose a project to start designing"
+                : "Select a project to continue, or create a new one"
             }
           </p>
         </div>
