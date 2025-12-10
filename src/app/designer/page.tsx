@@ -119,6 +119,76 @@ function formatCategoryName(name: string): string {
     .join(" ");
 }
 
+// Editable label component for inline text editing
+function EditableLabel({
+  value,
+  onSave,
+  className = "",
+  inputClassName = "",
+  editable = true,
+}: {
+  value: string;
+  onSave: (newValue: string) => void;
+  className?: string;
+  inputClassName?: string;
+  editable?: boolean;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+
+  const handleSave = () => {
+    if (editValue.trim() && editValue !== value) {
+      onSave(editValue.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSave();
+    } else if (e.key === "Escape") {
+      setEditValue(value);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing && editable) {
+    return (
+      <input
+        type="text"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={handleKeyDown}
+        className={cn(
+          "bg-zinc-800 border border-zinc-600 rounded px-1.5 py-0.5 text-white outline-none focus:ring-1 focus:ring-lime-500/50",
+          inputClassName
+        )}
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        className,
+        editable && "cursor-pointer hover:text-lime-400 transition-colors"
+      )}
+      onClick={(e) => {
+        if (editable) {
+          e.stopPropagation();
+          setIsEditing(true);
+        }
+      }}
+      title={editable ? "Click to edit" : undefined}
+    >
+      {value}
+    </span>
+  );
+}
+
 // Empty design JSON template
 const emptyDesignJSON: DesignJSON = {
   meta: { title: "", style_tags: [], summary: "" },
@@ -1117,6 +1187,47 @@ export default function DesignerPage() {
     }
   }, [jsonInput, autoExpandCategories]);
 
+  // Compress image to reduce payload size for Vercel
+  const compressImage = useCallback((file: File, maxDimension: number = 1024, quality: number = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      img.onload = () => {
+        // Calculate new dimensions while maintaining aspect ratio
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxDimension) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Convert to JPEG for better compression
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+        URL.revokeObjectURL(img.src);
+        resolve(compressedDataUrl);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        reject(new Error("Failed to load image"));
+      };
+
+      img.src = URL.createObjectURL(file);
+    });
+  }, []);
+
   // Image handling
   const processFile = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -1130,14 +1241,16 @@ export default function DesignerPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      setUploadedImages((prev) => [...prev, dataUrl]);
+    try {
+      // Compress image to reduce payload size (Vercel has ~4.5MB limit)
+      const compressedDataUrl = await compressImage(file, 1024, 0.85);
+      setUploadedImages((prev) => [...prev, compressedDataUrl]);
       setGenerationError(null);
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    } catch (error) {
+      console.error("Error compressing image:", error);
+      setGenerationError("Failed to process image");
+    }
+  }, [compressImage]);
 
   const handleFileSelect = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
