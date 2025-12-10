@@ -85,7 +85,7 @@ export function Comparison({
     <div
       ref={containerRef}
       className={cn(
-        "relative isolate w-full overflow-hidden rounded-lg bg-zinc-800 touch-none",
+        "relative isolate overflow-hidden rounded-lg bg-zinc-800 touch-none flex items-center justify-center",
         className
       )}
       onPointerDown={(e) => updatePosition(e.clientX)}
@@ -105,13 +105,13 @@ export function Comparison({
         </div>
       )}
 
-      {/* After image - determines container height */}
+      {/* After image - determines container size */}
       {afterImage && (
         <img
           src={afterImage}
           alt="After"
           className={cn(
-            "w-full h-auto block transition-opacity duration-300",
+            "max-w-full max-h-full w-auto h-auto block object-contain transition-opacity duration-300",
             imageLoaded ? "opacity-100" : "opacity-0 absolute",
             secondImageClassname
           )}

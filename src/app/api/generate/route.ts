@@ -409,6 +409,21 @@ export async function POST(request: NextRequest) {
       );
     } else {
       // Use Bytedance Seedream 4.5 for text-to-image generation
+      // Valid image_size values for Seedream text-to-image
+      const validSeedreamSizes = [
+        "square_hd", "square", "portrait_4_3", "portrait_16_9",
+        "landscape_4_3", "landscape_16_9", "auto_2K", "auto_4K"
+      ];
+      
+      // Validate and map image size
+      let finalImageSize: string | { width: number; height: number } = "auto_2K";
+      if (imageSize && validSeedreamSizes.includes(imageSize)) {
+        finalImageSize = imageSize;
+      } else if (imageSize) {
+        // Map legacy values to valid ones
+        console.warn(`Invalid imageSize "${imageSize}" for Seedream, using auto_2K`);
+      }
+
       falResponse = await fetch(
         "https://fal.run/fal-ai/bytedance/seedream/v4.5/text-to-image",
         {
@@ -419,7 +434,7 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify({
             prompt,
-            image_size: imageSize || "auto_2K",
+            image_size: finalImageSize,
             num_images: Math.min(numImages || 1, 6),
             enable_safety_checker: true,
             sync_mode: !!syncMode,

@@ -62,9 +62,25 @@ const MODEL_OPTIONS: ModelOption[] = [
 // Aspect ratios per model
 const NANO_BANANA_PRO_RATIOS = ["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
 const GOOGLE_NANO_RATIOS = ["match_input_image", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
-const SEEDREAM_SIZES = ["auto_2K", "auto_4K", "1K", "2K", "4K"];
-// Seedream Edit uses different size presets
+// Seedream text-to-image valid sizes (must match API exactly)
+const SEEDREAM_SIZES = ["auto_2K", "auto_4K", "square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"];
+// Seedream Edit uses the same size presets
 const SEEDREAM_EDIT_SIZES = ["auto_4K", "auto_2K", "square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"];
+
+// Format size labels for display
+const formatSizeLabel = (size: string): string => {
+  const labels: Record<string, string> = {
+    "auto_2K": "Auto 2K",
+    "auto_4K": "Auto 4K",
+    "square_hd": "Square HD",
+    "square": "Square",
+    "portrait_4_3": "Portrait 4:3",
+    "portrait_16_9": "Portrait 16:9",
+    "landscape_4_3": "Landscape 4:3",
+    "landscape_16_9": "Landscape 16:9",
+  };
+  return labels[size] || size;
+};
 
 type GenerationItem = {
   id: string;
@@ -352,6 +368,7 @@ export default function ProjectWorkspace() {
                 safetyFilter: "block_only_high" 
               },
               inputImageUrls: data.inputImageUrls || [],
+              model: data.model || currentModel,
             });
             if (saved) savedId = saved.id;
           }
@@ -639,7 +656,7 @@ export default function ProjectWorkspace() {
                         {SEEDREAM_SIZES.map((size) => (
                           <button key={size} onClick={() => setImageSize(size as ImageSize)}
                             className={cn("px-2 py-1 text-xs rounded-md transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-800 text-zinc-400 hover:text-white")}
-                          >{size === "auto_2K" ? "Auto 2K" : size === "auto_4K" ? "Auto 4K" : size}</button>
+                          >{formatSizeLabel(size)}</button>
                         ))}
                       </div>
                     </div>
@@ -653,7 +670,7 @@ export default function ProjectWorkspace() {
                         {SEEDREAM_EDIT_SIZES.map((size) => (
                           <button key={size} onClick={() => setImageSize(size as ImageSize)}
                             className={cn("px-2 py-1 text-xs rounded-md transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-800 text-zinc-400 hover:text-white")}
-                          >{size === "auto_4K" ? "Auto 4K" : size === "auto_2K" ? "Auto 2K" : size.replace("_", " ")}</button>
+                          >{formatSizeLabel(size)}</button>
                         ))}
                       </div>
                     </div>
@@ -817,7 +834,7 @@ export default function ProjectWorkspace() {
         </div>
 
         {/* History Feed */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-6">
           {generations.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center px-4">
               <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mb-4">
@@ -829,88 +846,94 @@ export default function ProjectWorkspace() {
               </p>
             </div>
           ) : (
-            <div className="space-y-6 max-w-6xl mx-auto">
+            <div className="space-y-6 mx-auto w-full">
               {generations.map((gen) => (
-                <div key={gen.id} className="group bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <p className="text-sm text-zinc-300 flex-1 line-clamp-2">{gen.prompt}</p>
+                <div key={gen.id} className="group bg-zinc-900/30 border border-zinc-800/50 rounded-2xl overflow-hidden">
+                  {/* Prompt bar - compact */}
+                  <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-zinc-800/30">
+                    <p className="text-sm text-zinc-300 flex-1 line-clamp-1">{gen.prompt}</p>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-zinc-600">{gen.aspectRatio || "auto"}</span>
                       <button onClick={() => copyPrompt(gen.prompt, gen.id)} className="p-1.5 text-zinc-600 hover:text-white transition-colors flex-shrink-0">
                         {copiedId === gen.id ? <Check className="w-4 h-4 text-lime-400" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
-                    <div className="relative">
-                      {gen.loading ? (
-                        <div className="aspect-[4/3] skeleton-generating rounded-xl flex items-center justify-center">
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-lime-400/10 flex items-center justify-center border border-lime-400/20 animate-[breathe_2s_ease-in-out_infinite]">
-                              <Sparkles className="w-5 h-5 text-lime-400" />
-                            </div>
-                            <span className="text-sm text-zinc-400">Generating...</span>
+                  </div>
+                  
+                  {/* Image - maximized to fit viewport */}
+                  <div className="relative flex items-center justify-center bg-zinc-950/50">
+                    {gen.loading ? (
+                      <div className="w-full aspect-[4/3] max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-200px)] skeleton-generating flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-lime-400/10 flex items-center justify-center border border-lime-400/20 animate-[breathe_2s_ease-in-out_infinite]">
+                            <Sparkles className="w-5 h-5 text-lime-400" />
                           </div>
+                          <span className="text-sm text-zinc-400">Generating...</span>
                         </div>
-                      ) : gen.error ? (
-                        <div className="min-h-[200px] bg-zinc-800 rounded-xl flex items-center justify-center">
-                          <div className="text-center p-4">
-                            <p className="text-red-400 mb-3 text-sm">{gen.error}</p>
-                            <button onClick={() => retry(gen)} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm flex items-center gap-2 mx-auto">
-                              <RotateCcw className="w-4 h-4" />Retry
-                            </button>
-                          </div>
-                        </div>
-                      ) : gen.inputImage && gen.outputImage && showBeforeAfter ? (
-                        <div className="cursor-pointer" onClick={() => setFullView(gen)}>
-                          <Comparison before={gen.inputImage} after={gen.outputImage} className="rounded-xl" />
-                        </div>
-                      ) : gen.outputImage ? (
-                        <div className="relative rounded-xl overflow-hidden">
-                          {/* Clean skeleton loading state */}
-                          {!loadedImages.has(gen.id) && (
-                            <div className="aspect-[4/3] skeleton-loader rounded-xl flex items-center justify-center">
-                              <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center animate-[breathe_2s_ease-in-out_infinite]">
-                                <ImageIcon className="w-5 h-5 text-zinc-600" />
-                              </div>
-                            </div>
-                          )}
-                          <img 
-                            src={gen.outputImage} 
-                            alt={gen.prompt} 
-                            className={cn(
-                              "w-full rounded-xl cursor-pointer block transition-opacity duration-300",
-                              loadedImages.has(gen.id) ? "opacity-100" : "opacity-0 absolute inset-0"
-                            )} 
-                            onClick={() => setFullView(gen)}
-                            loading="eager"
-                            decoding="async"
-                            onLoad={() => handleImageLoaded(gen.id)}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                    {gen.outputImage && !gen.loading && (
-                      <div className="flex items-center gap-2 mt-3">
-                        <button
-                          onClick={() => { useAsInput(gen.outputImage!); setMobileSheetExpanded(true); }}
-                          className="flex-1 py-2.5 bg-lime-400/10 hover:bg-lime-400/20 text-lime-400 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors border border-lime-400/20"
-                        >
-                          <ArrowRight className="w-4 h-4" />
-                          Edit this
-                        </button>
-                        <a href={gen.outputImage} download={`banana-${gen.id}.png`} target="_blank" rel="noopener noreferrer"
-                          className="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors" title="Download">
-                          <Download className="w-4 h-4" />
-                        </a>
-                        <button onClick={() => handleDeleteGeneration(gen.id)}
-                          className="p-2.5 bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-colors" title="Delete">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
-                    )}
+                    ) : gen.error ? (
+                      <div className="w-full min-h-[200px] bg-zinc-800 flex items-center justify-center">
+                        <div className="text-center p-4">
+                          <p className="text-red-400 mb-3 text-sm">{gen.error}</p>
+                          <button onClick={() => retry(gen)} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm flex items-center gap-2 mx-auto">
+                            <RotateCcw className="w-4 h-4" />Retry
+                          </button>
+                        </div>
+                      </div>
+                    ) : gen.inputImage && gen.outputImage && showBeforeAfter ? (
+                      <div className="w-full cursor-pointer" onClick={() => setFullView(gen)}>
+                        <Comparison 
+                          before={gen.inputImage} 
+                          after={gen.outputImage} 
+                          className="max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-200px)] w-full object-contain" 
+                        />
+                      </div>
+                    ) : gen.outputImage ? (
+                      <div className="relative w-full flex items-center justify-center">
+                        {/* Clean skeleton loading state */}
+                        {!loadedImages.has(gen.id) && (
+                          <div className="w-full aspect-[4/3] max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-200px)] skeleton-loader flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center animate-[breathe_2s_ease-in-out_infinite]">
+                              <ImageIcon className="w-5 h-5 text-zinc-600" />
+                            </div>
+                          </div>
+                        )}
+                        <img 
+                          src={gen.outputImage} 
+                          alt={gen.prompt} 
+                          className={cn(
+                            "max-w-full max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-200px)] w-auto h-auto object-contain cursor-pointer transition-opacity duration-300",
+                            loadedImages.has(gen.id) ? "opacity-100" : "opacity-0 absolute"
+                          )} 
+                          onClick={() => setFullView(gen)}
+                          loading="eager"
+                          decoding="async"
+                          onLoad={() => handleImageLoaded(gen.id)}
+                        />
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="px-3 py-2 bg-black/30 border-t border-zinc-800/50 flex items-center justify-between text-xs text-zinc-500">
-                    <span>{gen.aspectRatio || "auto"} • {gen.settings?.resolution || "2K"}</span>
-                    <span>{gen.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                  </div>
+                  
+                  {/* Actions bar */}
+                  {gen.outputImage && !gen.loading && (
+                    <div className="px-4 py-3 flex items-center gap-2 border-t border-zinc-800/30">
+                      <button
+                        onClick={() => { useAsInput(gen.outputImage!); setMobileSheetExpanded(true); }}
+                        className="flex-1 py-2.5 bg-lime-400/10 hover:bg-lime-400/20 text-lime-400 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors border border-lime-400/20"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Edit this
+                      </button>
+                      <a href={gen.outputImage} download={`banana-${gen.id}.png`} target="_blank" rel="noopener noreferrer"
+                        className="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors" title="Download">
+                        <Download className="w-4 h-4" />
+                      </a>
+                      <button onClick={() => handleDeleteGeneration(gen.id)}
+                        className="p-2.5 bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-colors" title="Delete">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               <div ref={historyEndRef} />
@@ -1088,7 +1111,7 @@ export default function ProjectWorkspace() {
                     <Settings2 className="w-4 h-4 text-zinc-400" />
                     <span className="text-sm text-zinc-300">
                       {selectedModel === "seedream" || selectedModel === "seedream-edit" 
-                        ? imageSize.replace("_", " ") 
+                        ? formatSizeLabel(imageSize) 
                         : selectedModel === "nano-banana-pro" 
                           ? `${aspectRatio} • ${resolution}` 
                           : aspectRatio}
@@ -1104,10 +1127,10 @@ export default function ProjectWorkspace() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-zinc-500 w-10">Size</span>
                         <div className="flex flex-wrap gap-1.5 flex-1">
-                          {SEEDREAM_SIZES.map((size) => (
+                          {SEEDREAM_SIZES.slice(0, 6).map((size) => (
                             <button key={size} onClick={() => setImageSize(size as ImageSize)}
                               className={cn("px-2.5 py-1.5 text-xs rounded-lg transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-700 text-zinc-400")}
-                            >{size === "auto_2K" ? "Auto 2K" : size === "auto_4K" ? "Auto 4K" : size}</button>
+                            >{formatSizeLabel(size)}</button>
                           ))}
                         </div>
                       </div>
@@ -1121,7 +1144,7 @@ export default function ProjectWorkspace() {
                           {SEEDREAM_EDIT_SIZES.slice(0, 6).map((size) => (
                             <button key={size} onClick={() => setImageSize(size as ImageSize)}
                               className={cn("px-2.5 py-1.5 text-xs rounded-lg transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-700 text-zinc-400")}
-                            >{size === "auto_4K" ? "4K" : size === "auto_2K" ? "2K" : size.replace("_", " ")}</button>
+                            >{formatSizeLabel(size)}</button>
                           ))}
                         </div>
                       </div>
@@ -1202,30 +1225,33 @@ export default function ProjectWorkspace() {
       {/* Full View Modal */}
       {fullView && (
         <div
-          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-2 lg:p-4"
+          className="fixed inset-0 z-50 bg-black flex flex-col"
           onClick={() => setFullView(null)}
         >
+          {/* Close button */}
           <button
             onClick={() => setFullView(null)}
-            className="absolute top-3 right-3 lg:top-4 lg:right-4 w-10 h-10 bg-zinc-800 hover:bg-zinc-700 rounded-full flex items-center justify-center z-10"
+            className="absolute top-3 right-3 lg:top-4 lg:right-4 w-10 h-10 bg-zinc-800/80 hover:bg-zinc-700 rounded-full flex items-center justify-center z-10 backdrop-blur-sm"
           >
             <X className="w-5 h-5" />
           </button>
 
+          {/* Image - maximized */}
           <div
-            className="max-w-5xl max-h-[75vh] lg:max-h-[85vh] w-full flex-1 flex items-center justify-center"
+            className="flex-1 flex items-center justify-center p-2 min-h-0"
             onClick={(e) => e.stopPropagation()}
           >
             {fullView.outputImage && (
               <img
                 src={fullView.outputImage}
                 alt={fullView.prompt}
-                className="max-w-full max-h-[70vh] lg:max-h-[80vh] mx-auto rounded-xl object-contain"
+                className="max-w-full max-h-full w-auto h-auto object-contain"
               />
             )}
           </div>
 
-          <div className="mt-3 lg:mt-4 flex items-center justify-center gap-2 lg:gap-3 w-full px-4 lg:px-0">
+          {/* Actions bar - compact */}
+          <div className="flex-shrink-0 p-3 lg:p-4 flex items-center justify-center gap-2 lg:gap-3 bg-zinc-900/80 backdrop-blur-sm border-t border-zinc-800/50">
             <button
               onClick={() => {
                 useAsInput(fullView.outputImage!);
@@ -1234,7 +1260,7 @@ export default function ProjectWorkspace() {
                   setMobileSheetExpanded(true);
                 }
               }}
-              className="flex-1 lg:flex-initial flex items-center justify-center gap-2 px-4 py-3 lg:py-2.5 bg-lime-400 text-black rounded-xl font-medium active:scale-[0.98] transition-all text-sm"
+              className="flex-1 lg:flex-initial flex items-center justify-center gap-2 px-4 py-3 lg:py-2.5 bg-lime-400 text-black rounded-xl font-medium active:scale-[0.98] transition-all text-sm max-w-xs"
             >
               <ArrowRight className="w-4 h-4" />
               Edit this
@@ -1244,7 +1270,7 @@ export default function ProjectWorkspace() {
               download
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 lg:flex-initial flex items-center justify-center gap-2 px-4 py-3 lg:py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors text-sm"
+              className="flex-1 lg:flex-initial flex items-center justify-center gap-2 px-4 py-3 lg:py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors text-sm max-w-xs"
             >
               <Download className="w-4 h-4" />
               Download

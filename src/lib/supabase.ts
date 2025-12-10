@@ -208,6 +208,7 @@ export async function saveGeneratedImage(data: {
     safetyFilter?: string;
   };
   inputImageUrls?: string[];
+  model?: string;
 }): Promise<GeneratedImage> {
   if (!supabaseUrl || !supabasePublicKey) {
     throw new Error(
@@ -226,6 +227,7 @@ export async function saveGeneratedImage(data: {
       output_format: data.settings?.outputFormat || "png",
       safety_filter: data.settings?.safetyFilter || "moderate",
       input_image_urls: data.inputImageUrls || [],
+      model: data.model || null,
     })
     .select()
     .single();
@@ -247,6 +249,7 @@ export type GeneratedImage = {
   output_format: string;
   safety_filter: string;
   input_image_urls: string[];
+  model: string | null;
 };
 
 export async function getGeneratedImages(projectId?: string | null, limit = 50): Promise<GeneratedImage[]> {

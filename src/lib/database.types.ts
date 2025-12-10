@@ -45,6 +45,7 @@ export interface Database {
           output_format: string;
           safety_filter: string;
           input_image_urls: string[];
+          model: string | null;
         };
         Insert: {
           id?: string;
@@ -57,6 +58,7 @@ export interface Database {
           output_format: string;
           safety_filter: string;
           input_image_urls?: string[];
+          model?: string | null;
         };
         Update: {
           id?: string;
@@ -69,6 +71,7 @@ export interface Database {
           output_format?: string;
           safety_filter?: string;
           input_image_urls?: string[];
+          model?: string | null;
         };
         Relationships: [
           {
@@ -227,6 +230,88 @@ export interface Database {
           }
         ];
       };
+      rooms: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          project_id: string;
+          name: string;
+          description: string | null;
+          thumbnail_url: string | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          project_id: string;
+          name: string;
+          description?: string | null;
+          thumbnail_url?: string | null;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          project_id?: string;
+          name?: string;
+          description?: string | null;
+          thumbnail_url?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rooms_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      room_designs: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          room_id: string;
+          design_json: Json;
+          prompt: string | null;
+          reference_image_urls: string[];
+          before_image_url: string | null;
+          rendered_image_url: string | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          room_id: string;
+          design_json: Json;
+          prompt?: string | null;
+          reference_image_urls?: string[];
+          before_image_url?: string | null;
+          rendered_image_url?: string | null;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          room_id?: string;
+          design_json?: Json;
+          prompt?: string | null;
+          reference_image_urls?: string[];
+          before_image_url?: string | null;
+          rendered_image_url?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "room_designs_room_id_fkey";
+            columns: ["room_id"];
+            isOneToOne: false;
+            referencedRelation: "rooms";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -257,3 +342,5 @@ export type PromptTemplate = Database["public"]["Tables"]["prompt_templates"]["R
   prompt_categories?: { name: string; icon: string };
 };
 export type VideoFlow = Database["public"]["Tables"]["video_flows"]["Row"];
+export type Room = Database["public"]["Tables"]["rooms"]["Row"];
+export type RoomDesign = Database["public"]["Tables"]["room_designs"]["Row"];

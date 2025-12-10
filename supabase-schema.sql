@@ -75,8 +75,20 @@ CREATE TABLE IF NOT EXISTS generated_images (
   resolution TEXT NOT NULL DEFAULT '2K',
   output_format TEXT NOT NULL DEFAULT 'png',
   safety_filter TEXT NOT NULL DEFAULT 'block_only_high',
-  input_image_urls TEXT[] DEFAULT '{}'
+  input_image_urls TEXT[] DEFAULT '{}',
+  model TEXT DEFAULT NULL
 );
+
+-- Migration: Add model column if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'generated_images' AND column_name = 'model'
+  ) THEN
+    ALTER TABLE generated_images ADD COLUMN model TEXT DEFAULT NULL;
+  END IF;
+END $$;
 
 -- Reference Images Table (for uploaded input images)
 CREATE TABLE IF NOT EXISTS reference_images (
@@ -102,6 +114,47 @@ CREATE TABLE IF NOT EXISTS video_flows (
   resolution TEXT DEFAULT '720p',
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'generating', 'completed', 'failed'))
 );
+
+-- Rooms Table (for organizing designs within a project)
+CREATE TABLE IF NOT EXISTS rooms (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  thumbnail_url TEXT
+);
+
+-- Room Designs Table (stores the design JSON for each room)
+CREATE TABLE IF NOT EXISTS room_designs (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  design_json JSONB NOT NULL,
+  prompt TEXT,
+  reference_image_urls TEXT[] DEFAULT '{}',
+  before_image_url TEXT,
+  rendered_image_url TEXT
+);
+
+-- Migration: Add image columns to room_designs if they don't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'room_designs' AND column_name = 'before_image_url'
+  ) THEN
+    ALTER TABLE room_designs ADD COLUMN before_image_url TEXT;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'room_designs' AND column_name = 'rendered_image_url'
+  ) THEN
+    ALTER TABLE room_designs ADD COLUMN rendered_image_url TEXT;
+  END IF;
+END $$;
 
 -- Prompt Categories Table
 CREATE TABLE IF NOT EXISTS prompt_categories (
@@ -142,6 +195,10 @@ CREATE INDEX IF NOT EXISTS idx_prompt_templates_category ON prompt_templates(cat
 CREATE INDEX IF NOT EXISTS idx_prompt_templates_use_count ON prompt_templates(use_count DESC);
 CREATE INDEX IF NOT EXISTS idx_video_flows_project ON video_flows(project_id);
 CREATE INDEX IF NOT EXISTS idx_video_flows_created_at ON video_flows(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rooms_project ON rooms(project_id);
+CREATE INDEX IF NOT EXISTS idx_rooms_created_at ON rooms(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_room_designs_room ON room_designs(room_id);
+CREATE INDEX IF NOT EXISTS idx_room_designs_created_at ON room_designs(created_at DESC);
 
 -- Function to update project updated_at timestamp
 CREATE OR REPLACE FUNCTION update_project_timestamp()
@@ -167,6 +224,39 @@ CREATE TRIGGER update_project_on_reference_image
   WHEN (NEW.project_id IS NOT NULL)
   EXECUTE FUNCTION update_project_timestamp();
 
+-- Function to update room updated_at timestamp
+CREATE OR REPLACE FUNCTION update_room_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE rooms SET updated_at = NOW() WHERE id = NEW.room_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to auto-update room timestamp when designs are modified
+DROP TRIGGER IF EXISTS update_room_on_design ON room_designs;
+CREATE TRIGGER update_room_on_design
+  AFTER INSERT OR UPDATE ON room_designs
+  FOR EACH ROW
+  EXECUTE FUNCTION update_room_timestamp();
+
+-- Function to update project timestamp from room changes
+CREATE OR REPLACE FUNCTION update_project_from_room_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE projects SET updated_at = NOW() 
+  WHERE id = (SELECT project_id FROM rooms WHERE id = NEW.id);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to auto-update project timestamp when rooms are modified
+DROP TRIGGER IF EXISTS update_project_on_room ON rooms;
+CREATE TRIGGER update_project_on_room
+  AFTER INSERT OR UPDATE ON rooms
+  FOR EACH ROW
+  EXECUTE FUNCTION update_project_from_room_timestamp();
+
 -- ============================================
 -- ROW LEVEL SECURITY POLICIES
 -- ============================================
@@ -177,6 +267,8 @@ ALTER TABLE reference_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prompt_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prompt_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE video_flows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE room_designs ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist (makes script idempotent)
 DROP POLICY IF EXISTS "Allow public access to projects" ON projects;
@@ -256,6 +348,50 @@ USING (true);
 
 CREATE POLICY "Allow public delete from video_flows"
 ON video_flows FOR DELETE
+USING (true);
+
+-- Rooms policies (full public access)
+DROP POLICY IF EXISTS "Allow public access to rooms" ON rooms;
+DROP POLICY IF EXISTS "Allow public insert to rooms" ON rooms;
+DROP POLICY IF EXISTS "Allow public update to rooms" ON rooms;
+DROP POLICY IF EXISTS "Allow public delete from rooms" ON rooms;
+
+CREATE POLICY "Allow public access to rooms"
+ON rooms FOR SELECT
+USING (true);
+
+CREATE POLICY "Allow public insert to rooms"
+ON rooms FOR INSERT
+WITH CHECK (true);
+
+CREATE POLICY "Allow public update to rooms"
+ON rooms FOR UPDATE
+USING (true);
+
+CREATE POLICY "Allow public delete from rooms"
+ON rooms FOR DELETE
+USING (true);
+
+-- Room designs policies (full public access)
+DROP POLICY IF EXISTS "Allow public access to room_designs" ON room_designs;
+DROP POLICY IF EXISTS "Allow public insert to room_designs" ON room_designs;
+DROP POLICY IF EXISTS "Allow public update to room_designs" ON room_designs;
+DROP POLICY IF EXISTS "Allow public delete from room_designs" ON room_designs;
+
+CREATE POLICY "Allow public access to room_designs"
+ON room_designs FOR SELECT
+USING (true);
+
+CREATE POLICY "Allow public insert to room_designs"
+ON room_designs FOR INSERT
+WITH CHECK (true);
+
+CREATE POLICY "Allow public update to room_designs"
+ON room_designs FOR UPDATE
+USING (true);
+
+CREATE POLICY "Allow public delete from room_designs"
+ON room_designs FOR DELETE
 USING (true);
 
 -- Allow public read access to prompt_categories
