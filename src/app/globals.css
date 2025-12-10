@@ -166,6 +166,15 @@ html {
   }
 }
 
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
 /* Elegant skeleton loader */
 .skeleton-loader {
   background: rgb(24 24 27);
