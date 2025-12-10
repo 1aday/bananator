@@ -1528,28 +1528,27 @@ export default function DesignerPage() {
           <div className="max-w-4xl mx-auto">
             {/* Show setup prompt if no project/room selected */}
             {!selectedProject ? (
-              <div className="h-full flex flex-col items-center justify-center text-center px-4 py-12">
-                {/* Animated icon with glow */}
-                <div className="relative mb-6">
+              <div className="h-full flex flex-col items-center justify-center text-center px-4 py-8">
+                {/* Header */}
+                <div className="relative mb-4">
                   <div className="absolute inset-0 bg-violet-500/20 rounded-2xl blur-xl animate-pulse" />
-                  <div className="relative w-20 h-20 bg-gradient-to-br from-violet-500/20 to-violet-600/10 rounded-2xl flex items-center justify-center border border-violet-500/20">
-                    <Building2 className="w-10 h-10 text-violet-400 animate-[float_3s_ease-in-out_infinite]" />
+                  <div className="relative w-16 h-16 bg-gradient-to-br from-violet-500/20 to-violet-600/10 rounded-2xl flex items-center justify-center border border-violet-500/20">
+                    <Building2 className="w-8 h-8 text-violet-400" />
                   </div>
                 </div>
                 
-                <h3 className="text-xl font-semibold text-white mb-2">
+                <h3 className="text-xl font-semibold text-white mb-1">
                   Select a Project
                 </h3>
-                <p className="text-zinc-500 max-w-md text-sm mb-6">
-                  Choose a project from the dropdown above to start designing rooms.
+                <p className="text-zinc-500 text-sm mb-6">
+                  Choose a project to start designing rooms
                 </p>
+                
                 {isLoadingProjects ? (
                   <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
                 ) : projects.length === 0 ? (
                   <div className="flex flex-col items-center gap-3">
-                    <p className="text-zinc-600 text-sm">
-                      No projects yet.
-                    </p>
+                    <p className="text-zinc-600 text-sm">No projects yet.</p>
                     <Link
                       href="/"
                       className="flex items-center gap-2 px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors"
@@ -1559,56 +1558,103 @@ export default function DesignerPage() {
                     </Link>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 px-4 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl text-violet-300 text-sm">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
-                    </span>
-                    {projects.length} project{projects.length > 1 ? 's' : ''} available
+                  <div className="w-full max-w-2xl">
+                    {/* Project Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+                      {projects.slice(0, 8).map((project) => (
+                        <button
+                          key={project.id}
+                          onClick={() => setSelectedProject(project)}
+                          className="group flex flex-col items-center gap-2 p-3 sm:p-4 bg-zinc-900/50 hover:bg-violet-500/10 border border-zinc-800 hover:border-violet-500/50 rounded-xl transition-all hover:scale-[1.02]"
+                        >
+                          <div className="w-10 h-10 bg-zinc-800 group-hover:bg-violet-500/20 rounded-lg flex items-center justify-center transition-colors">
+                            <FolderOpen className="w-5 h-5 text-zinc-500 group-hover:text-violet-400 transition-colors" />
+                          </div>
+                          <span className="text-sm text-zinc-300 group-hover:text-white font-medium truncate w-full text-center transition-colors">
+                            {project.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {/* Show more indicator */}
+                    {projects.length > 8 && (
+                      <p className="text-xs text-zinc-600 mt-4">
+                        +{projects.length - 8} more in dropdown above
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
             ) : !selectedRoom ? (
-              <div className="h-full flex flex-col items-center justify-center text-center px-4 py-12">
-                {/* Animated door icon */}
-                <div className="relative mb-6">
+              <div className="h-full flex flex-col items-center justify-center text-center px-4 py-8">
+                {/* Header */}
+                <div className="relative mb-4">
                   <div className="absolute inset-0 bg-lime-500/20 rounded-2xl blur-xl animate-pulse" />
-                  <div className="relative w-20 h-20 bg-gradient-to-br from-lime-500/20 to-lime-600/10 rounded-2xl flex items-center justify-center border border-lime-500/20 overflow-hidden group cursor-pointer" onClick={() => setShowNewRoomInput(true)}>
-                    {/* Door animation - closed to open */}
-                    <div className="relative">
-                      <DoorClosed className="w-10 h-10 text-lime-400 transition-all duration-500 group-hover:opacity-0 group-hover:scale-90" />
-                      <DoorOpen className="w-10 h-10 text-lime-400 absolute inset-0 transition-all duration-500 opacity-0 scale-110 group-hover:opacity-100 group-hover:scale-100" />
-                    </div>
+                  <div className="relative w-16 h-16 bg-gradient-to-br from-lime-500/20 to-lime-600/10 rounded-2xl flex items-center justify-center border border-lime-500/20">
+                    <DoorClosed className="w-8 h-8 text-lime-400" />
                   </div>
                 </div>
                 
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Select or Create a Room
+                <h3 className="text-xl font-semibold text-white mb-1">
+                  Select a Room
                 </h3>
-                <p className="text-zinc-500 max-w-md text-sm mb-4">
-                  Choose an existing room from the dropdown above, or create a new one.
+                <p className="text-zinc-500 text-sm mb-6">
+                  in <span className="text-violet-400 font-medium">{selectedProject?.name}</span>
                 </p>
                 
                 {isLoadingRooms ? (
                   <Loader2 className="w-6 h-6 text-lime-400 animate-spin" />
                 ) : (
-                  <div className="flex flex-col items-center gap-4">
-                    {rooms.length > 0 && (
-                      <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 border border-zinc-700 rounded-xl text-zinc-400 text-sm">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lime-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-lime-500" />
-                        </span>
-                        {rooms.length} room{rooms.length > 1 ? 's' : ''} in this project
+                  <div className="w-full max-w-2xl">
+                    {rooms.length > 0 ? (
+                      <>
+                        {/* Room Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-4">
+                          {rooms.map((room) => (
+                            <button
+                              key={room.id}
+                              onClick={() => setSelectedRoom(room)}
+                              className="group flex flex-col items-center gap-2 p-3 sm:p-4 bg-zinc-900/50 hover:bg-lime-500/10 border border-zinc-800 hover:border-lime-500/50 rounded-xl transition-all hover:scale-[1.02]"
+                            >
+                              <div className="w-10 h-10 bg-zinc-800 group-hover:bg-lime-500/20 rounded-lg flex items-center justify-center transition-colors">
+                                <DoorOpen className="w-5 h-5 text-zinc-500 group-hover:text-lime-400 transition-colors" />
+                              </div>
+                              <span className="text-sm text-zinc-300 group-hover:text-white font-medium truncate w-full text-center transition-colors">
+                                {room.name}
+                              </span>
+                            </button>
+                          ))}
+                          
+                          {/* Create New Room Card */}
+                          <button
+                            onClick={() => setShowNewRoomInput(true)}
+                            className="group flex flex-col items-center gap-2 p-3 sm:p-4 bg-lime-500/5 hover:bg-lime-500/15 border-2 border-dashed border-lime-500/30 hover:border-lime-500/60 rounded-xl transition-all hover:scale-[1.02]"
+                          >
+                            <div className="w-10 h-10 bg-lime-500/10 group-hover:bg-lime-500/20 rounded-lg flex items-center justify-center transition-colors">
+                              <Plus className="w-5 h-5 text-lime-500 group-hover:text-lime-400 transition-colors" />
+                            </div>
+                            <span className="text-sm text-lime-500 group-hover:text-lime-400 font-medium transition-colors">
+                              New Room
+                            </span>
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 border border-zinc-700 rounded-xl text-zinc-500 text-sm">
+                          <DoorClosed className="w-4 h-4" />
+                          No rooms yet in this project
+                        </div>
+                        <button
+                          onClick={() => setShowNewRoomInput(true)}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-lime-500 hover:bg-lime-400 text-black font-medium rounded-xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-lime-500/20"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create First Room
+                        </button>
                       </div>
                     )}
-                    <button
-                      onClick={() => setShowNewRoomInput(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-lime-500 hover:bg-lime-400 text-black font-medium rounded-xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-lime-500/20"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Create New Room
-                    </button>
                   </div>
                 )}
               </div>
