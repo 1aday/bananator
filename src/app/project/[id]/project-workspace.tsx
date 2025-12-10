@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 
 type AspectRatio = "auto" | "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9" | "match_input_image";
-type Resolution = "1K" | "2K";
+type Resolution = "1K" | "2K" | "4K";
 type OutputFormat = "jpg" | "png" | "webp";
 type ImageSize = "auto_2K" | "1K" | "2K" | "4K";
 type ModelType = "nano-banana-pro" | "seedream" | "google-nano-banana";
@@ -400,17 +400,8 @@ export default function ProjectWorkspace() {
   if (projectLoading) {
     return (
       <div className="h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-5">
-          {/* Logo */}
-          <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-800">
-            <span className="text-2xl">🍌</span>
-          </div>
-          
-          {/* Spinner */}
-          <div className="relative w-8 h-8">
-            <div className="absolute inset-0 rounded-full border-2 border-zinc-800" />
-            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
-          </div>
+        <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-800 animate-[breathe_2s_ease-in-out_infinite]">
+          <span className="text-2xl">🍌</span>
         </div>
       </div>
     );
@@ -631,7 +622,7 @@ export default function ProjectWorkspace() {
                     <div>
                       <span className="text-xs text-zinc-500 uppercase tracking-wide">Resolution</span>
                       <div className="flex gap-1 mt-1.5">
-                        {["1K", "2K"].map((res) => (
+                        {["1K", "2K", "4K"].map((res) => (
                           <button key={res} onClick={() => setResolution(res as Resolution)}
                             className={cn("px-3 py-1 text-xs rounded-md transition-colors", resolution === res ? "bg-lime-400 text-black font-medium" : "bg-zinc-800 text-zinc-400 hover:text-white")}
                           >{res}</button>
@@ -751,7 +742,7 @@ export default function ProjectWorkspace() {
         </div>
 
         {/* History Feed */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-6">
           {generations.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center px-4">
               <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mb-4">
@@ -763,10 +754,10 @@ export default function ProjectWorkspace() {
               </p>
             </div>
           ) : (
-            <div className="max-w-2xl mx-auto space-y-4">
+            <div className="space-y-6 max-w-6xl mx-auto">
               {generations.map((gen) => (
                 <div key={gen.id} className="group bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                  <div className="p-3">
+                  <div className="p-4">
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <p className="text-sm text-zinc-300 flex-1 line-clamp-2">{gen.prompt}</p>
                       <button onClick={() => copyPrompt(gen.prompt, gen.id)} className="p-1.5 text-zinc-600 hover:text-white transition-colors flex-shrink-0">
@@ -775,19 +766,12 @@ export default function ProjectWorkspace() {
                     </div>
                     <div className="relative">
                       {gen.loading ? (
-                        <div className="min-h-[200px] bg-zinc-900 rounded-xl flex items-center justify-center relative overflow-hidden">
-                          {/* Subtle shimmer */}
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.02] to-transparent animate-[shimmer_2s_infinite]" />
-                          
-                          <div className="flex flex-col items-center gap-4">
-                            {/* Clean spinner */}
-                            <div className="relative w-10 h-10">
-                              <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
-                              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
+                        <div className="aspect-[4/3] skeleton-generating rounded-xl flex items-center justify-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-lime-400/10 flex items-center justify-center border border-lime-400/20 animate-[breathe_2s_ease-in-out_infinite]">
+                              <Sparkles className="w-5 h-5 text-lime-400" />
                             </div>
-                            
-                            {/* Simple text */}
-                            <p className="text-sm text-zinc-400">Generating...</p>
+                            <span className="text-sm text-zinc-400">Generating...</span>
                           </div>
                         </div>
                       ) : gen.error ? (
@@ -804,19 +788,12 @@ export default function ProjectWorkspace() {
                           <Comparison before={gen.inputImage} after={gen.outputImage} className="rounded-xl" />
                         </div>
                       ) : gen.outputImage ? (
-                        <div className={cn(
-                          "relative bg-zinc-900 rounded-xl overflow-hidden",
-                          !loadedImages.has(gen.id) && "min-h-[200px]"
-                        )}>
-                          {/* Loading state */}
+                        <div className="relative rounded-xl overflow-hidden">
+                          {/* Clean skeleton loading state */}
                           {!loadedImages.has(gen.id) && (
-                            <div className="absolute inset-0 flex items-center justify-center z-10 bg-zinc-900">
-                              <div className="flex flex-col items-center gap-3">
-                                <div className="relative w-8 h-8">
-                                  <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
-                                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
-                                </div>
-                                <span className="text-xs text-zinc-500">Loading image...</span>
+                            <div className="aspect-[4/3] skeleton-loader rounded-xl flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center animate-[breathe_2s_ease-in-out_infinite]">
+                                <ImageIcon className="w-5 h-5 text-zinc-600" />
                               </div>
                             </div>
                           )}
@@ -825,7 +802,7 @@ export default function ProjectWorkspace() {
                             alt={gen.prompt} 
                             className={cn(
                               "w-full rounded-xl cursor-pointer block transition-opacity duration-300",
-                              loadedImages.has(gen.id) ? "opacity-100" : "opacity-0"
+                              loadedImages.has(gen.id) ? "opacity-100" : "opacity-0 absolute inset-0"
                             )} 
                             onClick={() => setFullView(gen)}
                             loading="eager"
@@ -1074,7 +1051,7 @@ export default function ProjectWorkspace() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-zinc-500 w-10">Quality</span>
                         <div className="flex gap-1.5">
-                          {["1K", "2K"].map((res) => (
+                          {["1K", "2K", "4K"].map((res) => (
                             <button key={res} onClick={() => setResolution(res as Resolution)}
                               className={cn("px-3 py-1.5 text-xs rounded-lg transition-colors", resolution === res ? "bg-lime-400 text-black font-medium" : "bg-zinc-700 text-zinc-400")}
                             >{res}</button>

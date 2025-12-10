@@ -371,7 +371,7 @@ export async function POST(request: NextRequest) {
             num_images: Math.min(numImages || 1, 4),
             aspect_ratio: aspectRatio || "auto",
             output_format: format,
-            resolution: resolution || "1K",
+            resolution: resolution || "2K",
             limit_generations: !!limitGenerations,
             enable_web_search: !!enableWebSearch,
             sync_mode: !!syncMode,

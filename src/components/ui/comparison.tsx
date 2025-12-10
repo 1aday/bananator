@@ -93,12 +93,14 @@ export function Comparison({
       onTouchMove={handleTouchMove}
       {...props}
     >
-      {/* Loading placeholder */}
+      {/* Clean skeleton loading state */}
       {!imageLoaded && (
-        <div className="w-full aspect-video flex items-center justify-center bg-zinc-900">
-          <div className="relative w-8 h-8">
-            <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
-            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
+        <div className="w-full aspect-video skeleton-loader rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center animate-[breathe_2s_ease-in-out_infinite]">
+            <svg className="w-5 h-5 text-zinc-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="3" width="7" height="18" rx="1" />
+              <rect x="14" y="3" width="7" height="18" rx="1" />
+            </svg>
           </div>
         </div>
       )}

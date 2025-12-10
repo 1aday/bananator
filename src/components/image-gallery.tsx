@@ -122,9 +122,8 @@ export function ImageGallery({
         <div className="flex-1 overflow-hidden flex">
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center">
-              <div className="relative w-8 h-8">
-                <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
-                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-lime-400 animate-spin" />
+              <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center animate-[breathe_2s_ease-in-out_infinite]">
+                <Images className="w-6 h-6 text-zinc-500" />
               </div>
             </div>
           ) : images.length === 0 ? (
