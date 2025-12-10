@@ -2149,8 +2149,23 @@ export default function DesignerPage() {
                                   {categoryIcons[category] || <Box className="w-4 h-4" />}
                                 </span>
                                 <div>
-                                  <p className="text-sm font-medium text-white">{item.label}</p>
-                                  <p className="text-xs text-zinc-500">{formatCategoryName(category)}</p>
+                                  <EditableLabel
+                                    value={item.label}
+                                    onSave={(newValue) => updateItem("shell", category, item.id, { label: newValue })}
+                                    className="text-sm font-medium text-white"
+                                    inputClassName="text-sm w-36"
+                                  />
+                                  <EditableLabel
+                                    value={formatCategoryName(category)}
+                                    onSave={(newValue) => {
+                                      const newKey = newValue.toLowerCase().replace(/\s+/g, "_");
+                                      if (newKey !== category) {
+                                        renameCategory("shell", category, newKey);
+                                      }
+                                    }}
+                                    className="text-xs text-zinc-500"
+                                    inputClassName="text-xs w-28"
+                                  />
                                 </div>
                               </div>
                               <button
@@ -2231,8 +2246,23 @@ export default function DesignerPage() {
                                   {categoryIcons[category] || <Sofa className="w-4 h-4" />}
                                 </span>
                                 <div>
-                                  <p className="text-sm font-medium text-white">{item.label}</p>
-                                  <p className="text-xs text-zinc-500">{formatCategoryName(category)}</p>
+                                  <EditableLabel
+                                    value={item.label}
+                                    onSave={(newValue) => updateItem("interior", category, item.id, { label: newValue })}
+                                    className="text-sm font-medium text-white"
+                                    inputClassName="text-sm w-36"
+                                  />
+                                  <EditableLabel
+                                    value={formatCategoryName(category)}
+                                    onSave={(newValue) => {
+                                      const newKey = newValue.toLowerCase().replace(/\s+/g, "_");
+                                      if (newKey !== category) {
+                                        renameCategory("interior", category, newKey);
+                                      }
+                                    }}
+                                    className="text-xs text-zinc-500"
+                                    inputClassName="text-xs w-28"
+                                  />
                                 </div>
                               </div>
                               <button

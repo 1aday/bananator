@@ -44,6 +44,7 @@ Created an AI-powered interior design workspace that transforms any room photo i
 - Made section labels (category names like "Ceiling", "Walls", "Furniture") editable by clicking
 - Made item labels (like "Modern Sofa", "Pendant Light") editable by clicking
 - Labels convert to inline inputs on click with Enter to save, Escape to cancel
+- Editing works in both the sidebar panel AND the main area grid cards
 
 ### 2. Design Element Cards
 - Created a grid view showing all design items at a glance
