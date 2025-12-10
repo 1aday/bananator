@@ -358,12 +358,6 @@ export async function POST(request: NextRequest) {
 
     if (selectedModel === "nano-banana-pro") {
       // Use nano-banana-pro/edit for image-to-image editing
-      if (!hasImages) {
-        return NextResponse.json(
-          { error: "At least one image is required for nano-banana-pro edit mode" },
-          { status: 400 }
-        );
-      }
       imageUrls = await ensureImageUrls(imageInputs.slice(0, 10), compressImages);
 
       falResponse = await fetch(
@@ -383,6 +377,32 @@ export async function POST(request: NextRequest) {
             resolution: resolution || "2K",
             limit_generations: !!limitGenerations,
             enable_web_search: !!enableWebSearch,
+            sync_mode: !!syncMode,
+          }),
+        }
+      );
+    } else if (selectedModel === "seedream-edit") {
+      // Use Bytedance Seedream 4.5 Edit for multi-image editing
+      imageUrls = await ensureImageUrls(imageInputs.slice(0, 10), compressImages);
+      
+      // Map imageSize to Seedream Edit format
+      const seedreamImageSize = mapImageSizeForSeedreamEdit(imageSize);
+
+      falResponse = await fetch(
+        "https://fal.run/fal-ai/bytedance/seedream/v4.5/edit",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Key ${process.env.FAL_KEY}`,
+          },
+          body: JSON.stringify({
+            prompt,
+            image_urls: imageUrls,
+            image_size: seedreamImageSize,
+            num_images: Math.min(numImages || 1, 6),
+            max_images: 1, // Single output per generation
+            enable_safety_checker: true,
             sync_mode: !!syncMode,
           }),
         }
@@ -444,6 +464,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Determine model name for response
+    const modelName = selectedModel === "seedream" 
+      ? "bytedance/seedream/v4.5/text-to-image" 
+      : selectedModel === "seedream-edit"
+        ? "bytedance/seedream/v4.5/edit"
+        : "nano-banana-pro/edit";
+
     return NextResponse.json({
       success: true,
       imageUrl: finalImageUrl,
@@ -456,7 +483,7 @@ export async function POST(request: NextRequest) {
       },
       sourceUrl: firstImageUrl,
       inputImageUrls: imageUrls,
-      model: selectedModel === "seedream" ? "bytedance/seedream/v4.5" : "nano-banana-pro/edit",
+      model: modelName,
       seed: falResult.seed,
     });
   } catch (error) {
@@ -483,4 +510,35 @@ function mapAspectRatioForReplicate(ratio: string | undefined, hasImages: boolea
   
   // Map any non-supported ratios
   return hasImages ? "match_input_image" : "1:1";
+}
+
+// Map image size for Seedream Edit
+// Supported: square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9, auto_2K, auto_4K
+// Or custom { width, height } object
+function mapImageSizeForSeedreamEdit(size: string | undefined): string | { width: number; height: number } {
+  const validPresets = [
+    "square_hd", "square", "portrait_4_3", "portrait_16_9", 
+    "landscape_4_3", "landscape_16_9", "auto_2K", "auto_4K"
+  ];
+  
+  if (!size) {
+    return "auto_4K";
+  }
+  
+  // If it's a valid preset, return as-is
+  if (validPresets.includes(size)) {
+    return size;
+  }
+  
+  // Map older size formats to Seedream Edit presets
+  switch (size) {
+    case "1K":
+      return { width: 1024, height: 1024 };
+    case "2K":
+      return "auto_2K";
+    case "4K":
+      return "auto_4K";
+    default:
+      return "auto_4K";
+  }
 }

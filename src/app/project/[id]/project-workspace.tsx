@@ -229,10 +229,18 @@ export default function ProjectWorkspace() {
     setIsDragging(false);
   }, []);
 
-  // Use generated image as input
+  // Use generated image as input - auto-switch to compatible model if needed
   const useAsInput = useCallback((imageUrl: string) => {
     setInputImage(imageUrl);
-  }, []);
+    
+    // If current model doesn't support image input, switch to one that does
+    const currentModelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel);
+    if (!currentModelInfo?.supportsImageInput) {
+      // Switch to nano-banana-pro as the default image editing model
+      setSelectedModel("nano-banana-pro");
+      setAspectRatio("auto");
+    }
+  }, [selectedModel]);
 
   // Copy prompt
   const copyPrompt = useCallback((text: string, id: string) => {
@@ -250,6 +258,13 @@ export default function ProjectWorkspace() {
   const generate = useCallback(async () => {
     if (!prompt.trim()) {
       setError("Please enter a prompt");
+      return;
+    }
+
+    // Check if model requires image input
+    const currentModelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel);
+    if (currentModelInfo?.requiresImageInput && !inputImage) {
+      setError(`${currentModelInfo.label} requires an input image. Please add an image or switch to a different model.`);
       return;
     }
 
@@ -516,7 +531,13 @@ export default function ProjectWorkspace() {
           <div className="p-4 border-b border-white/5">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-zinc-300">Input Image</span>
-              <span className="text-xs text-zinc-500">(optional)</span>
+              {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput ? (
+                <span className="text-xs text-amber-400 font-medium">required</span>
+              ) : MODEL_OPTIONS.find(m => m.value === selectedModel)?.supportsImageInput ? (
+                <span className="text-xs text-zinc-500">(optional)</span>
+              ) : (
+                <span className="text-xs text-zinc-600">not used</span>
+              )}
             </div>
             {inputImage ? (
               <div className="relative group">
@@ -709,10 +730,22 @@ export default function ProjectWorkspace() {
                 <span className="text-xs text-lime-400">{activeGenerations} generation{activeGenerations > 1 ? 's' : ''} in progress</span>
               </div>
             )}
+            {/* Warning if model requires image but none provided */}
+            {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage && (
+              <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <Upload className="w-4 h-4 text-amber-400" />
+                <span className="text-xs text-amber-400">Add an image to use {MODEL_OPTIONS.find(m => m.value === selectedModel)?.label}</span>
+              </div>
+            )}
             <button
               onClick={generate}
-              disabled={!prompt.trim()}
-              className={cn("w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all", !prompt.trim() ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-lime-400 text-black hover:bg-lime-300 shadow-lg shadow-lime-400/20")}
+              disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)}
+              className={cn(
+                "w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all", 
+                !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" 
+                  : "bg-lime-400 text-black hover:bg-lime-300 shadow-lg shadow-lime-400/20"
+              )}
             >
               <Sparkles className="w-5 h-5" />
               Generate
@@ -722,9 +755,16 @@ export default function ProjectWorkspace() {
 
         {sidebarCollapsed && (
           <div className="p-3 border-t border-white/5">
-            <button onClick={generate} disabled={!prompt.trim()}
-              className={cn("w-full p-3 rounded-xl transition-all flex items-center justify-center", !prompt.trim() ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-lime-400 text-black hover:bg-lime-300 shadow-lg shadow-lime-400/20")}
-              title="Generate"
+            <button 
+              onClick={generate} 
+              disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)}
+              className={cn(
+                "w-full p-3 rounded-xl transition-all flex items-center justify-center", 
+                !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" 
+                  : "bg-lime-400 text-black hover:bg-lime-300 shadow-lg shadow-lime-400/20"
+              )}
+              title={MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage ? "Add an image first" : "Generate"}
             ><Sparkles className="w-5 h-5" /></button>
           </div>
         )}
@@ -1125,13 +1165,23 @@ export default function ProjectWorkspace() {
                 </div>
               )}
 
+              {/* Warning if model requires image but none provided */}
+              {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage && (
+                <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <Upload className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs text-amber-400">Add an image to use this model</span>
+                </div>
+              )}
+
               {/* Generate Button */}
               <button
                 onClick={() => { generate(); setMobileSheetExpanded(false); }}
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)}
                 className={cn(
                   "w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all",
-                  !prompt.trim() ? "bg-zinc-800 text-zinc-500" : "bg-lime-400 text-black active:scale-[0.98]"
+                  !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)
+                    ? "bg-zinc-800 text-zinc-500" 
+                    : "bg-lime-400 text-black active:scale-[0.98]"
                 )}
               >
                 <Sparkles className="w-5 h-5" />
