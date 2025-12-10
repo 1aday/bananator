@@ -559,6 +559,7 @@ export default function DesignerPage() {
   const [showNewRoomInput, setShowNewRoomInput] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState<Room | null>(null);
 
   // Design JSON state
   const [designJSON, setDesignJSON] = useState<DesignJSON>(emptyDesignJSON);
@@ -740,26 +741,31 @@ export default function DesignerPage() {
     }
   }, [selectedProject, newRoomName]);
 
-  // Delete room
+  // Delete room (can delete roomToDelete or selectedRoom)
   const deleteRoom = useCallback(async () => {
-    if (!selectedRoom) return;
+    const targetRoom = roomToDelete || selectedRoom;
+    if (!targetRoom) return;
 
     try {
-      const response = await fetch(`/api/rooms/${selectedRoom.id}`, {
+      const response = await fetch(`/api/rooms/${targetRoom.id}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
-        setRooms((prev) => prev.filter((r) => r.id !== selectedRoom.id));
-        setSelectedRoom(null);
-        setDesignJSON(emptyDesignJSON);
-        setUploadedImages([]);
-        setRenderedImage(null);
+        setRooms((prev) => prev.filter((r) => r.id !== targetRoom.id));
+        // If we deleted the currently selected room, clear the selection
+        if (selectedRoom?.id === targetRoom.id) {
+          setSelectedRoom(null);
+          setDesignJSON(emptyDesignJSON);
+          setUploadedImages([]);
+          setRenderedImage(null);
+        }
+        setRoomToDelete(null);
       }
     } catch (error) {
       console.error("Error deleting room:", error);
     }
-  }, [selectedRoom]);
+  }, [roomToDelete, selectedRoom]);
 
   // Save design to current room
   const saveDesign = useCallback(async () => {
@@ -1612,18 +1618,34 @@ export default function DesignerPage() {
                         {/* Room Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-4">
                           {rooms.map((room) => (
-                            <button
+                            <div
                               key={room.id}
-                              onClick={() => setSelectedRoom(room)}
-                              className="group flex flex-col items-center gap-2 p-3 sm:p-4 bg-zinc-900/50 hover:bg-lime-500/10 border border-zinc-800 hover:border-lime-500/50 rounded-xl transition-all hover:scale-[1.02]"
+                              className="group relative"
                             >
-                              <div className="w-10 h-10 bg-zinc-800 group-hover:bg-lime-500/20 rounded-lg flex items-center justify-center transition-colors">
-                                <DoorOpen className="w-5 h-5 text-zinc-500 group-hover:text-lime-400 transition-colors" />
-                              </div>
-                              <span className="text-sm text-zinc-300 group-hover:text-white font-medium truncate w-full text-center transition-colors">
-                                {room.name}
-                              </span>
-                            </button>
+                              <button
+                                onClick={() => setSelectedRoom(room)}
+                                className="w-full flex flex-col items-center gap-2 p-3 sm:p-4 bg-zinc-900/50 hover:bg-lime-500/10 border border-zinc-800 hover:border-lime-500/50 rounded-xl transition-all hover:scale-[1.02]"
+                              >
+                                <div className="w-10 h-10 bg-zinc-800 group-hover:bg-lime-500/20 rounded-lg flex items-center justify-center transition-colors">
+                                  <DoorOpen className="w-5 h-5 text-zinc-500 group-hover:text-lime-400 transition-colors" />
+                                </div>
+                                <span className="text-sm text-zinc-300 group-hover:text-white font-medium truncate w-full text-center transition-colors">
+                                  {room.name}
+                                </span>
+                              </button>
+                              {/* Delete button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRoomToDelete(room);
+                                  setShowDeleteConfirm(true);
+                                }}
+                                className="absolute top-1 right-1 p-1.5 rounded-lg bg-zinc-900/80 text-zinc-500 hover:text-red-400 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 transition-all"
+                                title={`Delete ${room.name}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           ))}
                           
                           {/* Create New Room Card */}
@@ -2566,10 +2588,13 @@ export default function DesignerPage() {
       {/* Delete Room Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setRoomToDelete(null);
+        }}
         onConfirm={deleteRoom}
         title="Delete Room"
-        description={`Are you sure you want to delete "${selectedRoom?.name}"? This will permanently remove all designs, images, and data associated with this room.`}
+        description={`Are you sure you want to delete "${(roomToDelete || selectedRoom)?.name}"? This will permanently remove all designs, images, and data associated with this room.`}
         confirmText="Delete Room"
         cancelText="Keep Room"
         variant="danger"
