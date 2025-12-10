@@ -382,6 +382,7 @@ function CategorySection({
   onRemoveMaterial,
   onUpdateItem,
   onDeleteItem,
+  onRenameCategory,
 }: {
   name: string;
   category: DesignCategory;
@@ -392,6 +393,7 @@ function CategorySection({
   onRemoveMaterial?: (material: string) => void;
   onUpdateItem?: (itemId: string, updates: Partial<DesignItem>) => void;
   onDeleteItem?: (itemId: string) => void;
+  onRenameCategory?: (newName: string) => void;
 }) {
   const hasContent =
     category.materials_overall.length > 0 || category.items.length > 0;
@@ -399,10 +401,10 @@ function CategorySection({
 
   return (
     <div className="border-b border-zinc-800/50 last:border-b-0">
-      <button
+      <div
         onClick={onToggle}
         className={cn(
-          "w-full flex items-center gap-2 px-3 py-2 text-left transition-colors",
+          "w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer",
           hasContent
             ? "hover:bg-zinc-800/50"
             : "hover:bg-zinc-800/30 opacity-50"
@@ -416,20 +418,39 @@ function CategorySection({
         <span className="text-zinc-400">
           {categoryIcons[name] || <Box className="w-3.5 h-3.5" />}
         </span>
-        <span
-          className={cn(
-            "text-sm flex-1",
-            hasContent ? "text-zinc-200 font-medium" : "text-zinc-500"
-          )}
-        >
-          {formatCategoryName(name)}
-        </span>
+        {isEditable && onRenameCategory ? (
+          <EditableLabel
+            value={formatCategoryName(name)}
+            onSave={(newValue) => {
+              // Convert display name back to snake_case key
+              const newKey = newValue.toLowerCase().replace(/\s+/g, "_");
+              if (newKey !== name) {
+                onRenameCategory(newKey);
+              }
+            }}
+            className={cn(
+              "text-sm flex-1",
+              hasContent ? "text-zinc-200 font-medium" : "text-zinc-500"
+            )}
+            inputClassName="text-sm w-32"
+            editable={true}
+          />
+        ) : (
+          <span
+            className={cn(
+              "text-sm flex-1",
+              hasContent ? "text-zinc-200 font-medium" : "text-zinc-500"
+            )}
+          >
+            {formatCategoryName(name)}
+          </span>
+        )}
         {hasContent && (
           <span className="text-xs text-lime-400 bg-lime-400/10 px-1.5 py-0.5 rounded">
             {category.items.length || category.materials_overall.length}
           </span>
         )}
-      </button>
+      </div>
 
       {isExpanded && (
         <div className="px-3 pb-3 pl-9 space-y-2">
@@ -492,9 +513,19 @@ function CategorySection({
               className="p-2 bg-zinc-800/30 rounded-lg border border-zinc-800 group"
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <p className="text-sm text-white font-medium">
-                  {item.label}
-                </p>
+                {isEditable && onUpdateItem ? (
+                  <EditableLabel
+                    value={item.label}
+                    onSave={(newValue) => onUpdateItem(item.id, { label: newValue })}
+                    className="text-sm text-white font-medium"
+                    inputClassName="text-sm w-40"
+                    editable={true}
+                  />
+                ) : (
+                  <p className="text-sm text-white font-medium">
+                    {item.label}
+                  </p>
+                )}
                 {isEditable && onDeleteItem && (
                   <button
                     onClick={() => onDeleteItem(item.id)}
