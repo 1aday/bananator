@@ -251,6 +251,15 @@ export async function POST(request: NextRequest) {
     const hasImages = imageInputs && Array.isArray(imageInputs) && imageInputs.length > 0;
     
     const selectedModel = model;
+    
+    // Validate image requirements per model
+    const modelRequiresImages = selectedModel === "nano-banana-pro" || selectedModel === "seedream-edit";
+    if (modelRequiresImages && !hasImages) {
+      return NextResponse.json(
+        { error: `${selectedModel} requires at least one input image` },
+        { status: 400 }
+      );
+    }
 
     // ============================================
     // GOOGLE NANO-BANANA (Replicate)
@@ -441,7 +450,7 @@ export async function POST(request: NextRequest) {
       prompt,
       settings: {
         aspectRatio: aspectRatio || "auto",
-        resolution: resolution || "1K",
+        resolution: resolution || "2K",
         outputFormat: format,
         imageSize: imageSize || "auto_2K",
       },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { getGeneratedImages, deleteGeneratedImage } from "@/lib/supabase";
 import type { GeneratedImage } from "@/lib/database.types";
@@ -8,11 +8,14 @@ import {
   Images,
   Trash2,
   ArrowRight,
-  Calendar,
   Settings2,
   X,
   Loader2,
   ExternalLink,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize2,
 } from "lucide-react";
 
 interface ImageGalleryProps {
@@ -36,6 +39,14 @@ export function ImageGallery({
     null
   );
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  // Full-screen zoom viewer state
+  const [isZoomViewerOpen, setIsZoomViewerOpen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const imageContainerRef = useRef<HTMLDivElement>(null);
 
   const loadImages = useCallback(async () => {
     // Don't load if no projectId - prevents loading all images or draw-to-edit images
@@ -82,6 +93,73 @@ export function ImageGallery({
     onUseAsInput(url);
     onClose();
   };
+
+  // Zoom viewer handlers
+  const openZoomViewer = () => {
+    setZoomLevel(1);
+    setPanPosition({ x: 0, y: 0 });
+    setIsZoomViewerOpen(true);
+  };
+
+  const closeZoomViewer = () => {
+    setIsZoomViewerOpen(false);
+    setZoomLevel(1);
+    setPanPosition({ x: 0, y: 0 });
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(prev * 1.5, 10));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(prev / 1.5, 0.5));
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel(1);
+    setPanPosition({ x: 0, y: 0 });
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setZoomLevel((prev) => Math.min(Math.max(prev * delta, 0.5), 10));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - panPosition.x, y: e.clientY - panPosition.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && zoomLevel > 1) {
+      setPanPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Keyboard shortcuts for zoom viewer
+  useEffect(() => {
+    if (!isZoomViewerOpen) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeZoomViewer();
+      if (e.key === "+" || e.key === "=") handleZoomIn();
+      if (e.key === "-") handleZoomOut();
+      if (e.key === "0") handleResetZoom();
+    };
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isZoomViewerOpen]);
 
   if (!isOpen) return null;
 
@@ -172,11 +250,24 @@ export function ImageGallery({
               {/* Detail Panel */}
               {selectedImage && (
                 <div className="w-80 border-l border-zinc-800 overflow-y-auto p-4 space-y-4">
-                  <img
-                    src={selectedImage.image_url}
-                    alt={selectedImage.prompt}
-                    className="w-full aspect-square object-cover rounded-xl"
-                  />
+                  <div 
+                    className="relative group cursor-zoom-in"
+                    onClick={openZoomViewer}
+                  >
+                    <img
+                      src={selectedImage.image_url}
+                      alt={selectedImage.prompt}
+                      className="w-full aspect-square object-cover rounded-xl transition-all group-hover:brightness-90"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-black/60 backdrop-blur-sm rounded-full p-3">
+                        <Maximize2 className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                    <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                      Click to zoom
+                    </div>
+                  </div>
 
                   {/* Prompt */}
                   <div>
@@ -291,6 +382,139 @@ export function ImageGallery({
           )}
         </div>
       </div>
+
+      {/* Full-Screen Zoom Viewer */}
+      {isZoomViewerOpen && selectedImage && (
+        <div 
+          className="fixed inset-0 z-[60] bg-black"
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
+          {/* Image Container */}
+          <div
+            ref={imageContainerRef}
+            className={cn(
+              "absolute inset-0 flex items-center justify-center overflow-hidden",
+              zoomLevel > 1 ? "cursor-grab" : "cursor-zoom-in",
+              isDragging && "cursor-grabbing"
+            )}
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onClick={(e) => {
+              if (!isDragging && zoomLevel === 1) {
+                handleZoomIn();
+              }
+            }}
+          >
+            <img
+              src={selectedImage.image_url}
+              alt={selectedImage.prompt}
+              className="max-w-none select-none transition-transform duration-150 ease-out"
+              style={{
+                transform: `translate(${panPosition.x}px, ${panPosition.y}px) scale(${zoomLevel})`,
+                maxHeight: zoomLevel === 1 ? "100vh" : "none",
+                maxWidth: zoomLevel === 1 ? "100vw" : "none",
+              }}
+              draggable={false}
+            />
+          </div>
+
+          {/* Top Bar */}
+          <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+            <div className="flex items-center justify-between pointer-events-auto">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                  <span className="text-white text-sm font-medium">
+                    {Math.round(zoomLevel * 100)}%
+                  </span>
+                </div>
+                <span className="text-white/60 text-sm hidden sm:block">
+                  Scroll to zoom • Drag to pan • Press 0 to reset
+                </span>
+              </div>
+              <button
+                onClick={closeZoomViewer}
+                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm flex items-center justify-center transition-colors"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Controls */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-sm rounded-2xl p-2 border border-zinc-700/50">
+            <button
+              onClick={handleZoomOut}
+              disabled={zoomLevel <= 0.5}
+              className="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+            >
+              <ZoomOut className="w-5 h-5 text-white" />
+            </button>
+            
+            {/* Zoom Slider */}
+            <div className="w-32 h-10 flex items-center px-2">
+              <input
+                type="range"
+                min="0.5"
+                max="5"
+                step="0.1"
+                value={zoomLevel}
+                onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer
+                  [&::-webkit-slider-thumb]:appearance-none
+                  [&::-webkit-slider-thumb]:w-4
+                  [&::-webkit-slider-thumb]:h-4
+                  [&::-webkit-slider-thumb]:rounded-full
+                  [&::-webkit-slider-thumb]:bg-lime-400
+                  [&::-webkit-slider-thumb]:cursor-pointer
+                  [&::-webkit-slider-thumb]:transition-transform
+                  [&::-webkit-slider-thumb]:hover:scale-110
+                  [&::-moz-range-thumb]:w-4
+                  [&::-moz-range-thumb]:h-4
+                  [&::-moz-range-thumb]:rounded-full
+                  [&::-moz-range-thumb]:bg-lime-400
+                  [&::-moz-range-thumb]:border-0
+                  [&::-moz-range-thumb]:cursor-pointer"
+              />
+            </div>
+            
+            <button
+              onClick={handleZoomIn}
+              disabled={zoomLevel >= 10}
+              className="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+            >
+              <ZoomIn className="w-5 h-5 text-white" />
+            </button>
+            
+            <div className="w-px h-6 bg-zinc-700 mx-1" />
+            
+            <button
+              onClick={handleResetZoom}
+              className="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors"
+              title="Reset zoom (0)"
+            >
+              <RotateCcw className="w-4 h-4 text-white" />
+            </button>
+            
+            <a
+              href={selectedImage.image_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors"
+              title="Open original"
+            >
+              <ExternalLink className="w-4 h-4 text-white" />
+            </a>
+          </div>
+
+          {/* Resolution Info */}
+          <div className="absolute bottom-6 right-6 bg-zinc-900/90 backdrop-blur-sm rounded-xl px-3 py-2 border border-zinc-700/50">
+            <span className="text-zinc-400 text-xs">Resolution: </span>
+            <span className="text-white text-xs font-medium">{selectedImage.resolution}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

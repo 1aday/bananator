@@ -39,19 +39,32 @@ import {
 type AspectRatio = "auto" | "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9" | "match_input_image";
 type Resolution = "1K" | "2K" | "4K";
 type OutputFormat = "jpg" | "png" | "webp";
-type ImageSize = "auto_2K" | "1K" | "2K" | "4K";
-type ModelType = "nano-banana-pro" | "seedream" | "google-nano-banana";
+type ImageSize = "auto_2K" | "auto_4K" | "1K" | "2K" | "4K" | "square_hd" | "square" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
+type ModelType = "nano-banana-pro" | "seedream" | "seedream-edit" | "google-nano-banana";
 
-const MODEL_OPTIONS: { value: ModelType; label: string; description: string; supportsImageInput: boolean }[] = [
-  { value: "nano-banana-pro", label: "Nano Banana Pro", description: "FAL • Image editing", supportsImageInput: true },
-  { value: "google-nano-banana", label: "Google Nano Banana", description: "Replicate • Fast & versatile", supportsImageInput: true },
-  { value: "seedream", label: "Seedream 4.5", description: "FAL • Text to image only", supportsImageInput: false },
+interface ModelOption {
+  value: ModelType;
+  label: string;
+  description: string;
+  supportsImageInput: boolean;
+  requiresImageInput?: boolean;
+  maxImages?: number;
+  sizeType: "aspectRatio" | "imageSize" | "seedreamSize";
+}
+
+const MODEL_OPTIONS: ModelOption[] = [
+  { value: "nano-banana-pro", label: "Nano Banana Pro", description: "FAL • Image editing", supportsImageInput: true, requiresImageInput: true, maxImages: 10, sizeType: "aspectRatio" },
+  { value: "google-nano-banana", label: "Google Nano Banana", description: "Replicate • Fast & versatile", supportsImageInput: true, maxImages: 10, sizeType: "aspectRatio" },
+  { value: "seedream-edit", label: "Seedream 4.5 Edit", description: "FAL • Multi-image editing", supportsImageInput: true, requiresImageInput: true, maxImages: 10, sizeType: "seedreamSize" },
+  { value: "seedream", label: "Seedream 4.5", description: "FAL • Text to image only", supportsImageInput: false, sizeType: "imageSize" },
 ];
 
 // Aspect ratios per model
 const NANO_BANANA_PRO_RATIOS = ["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
 const GOOGLE_NANO_RATIOS = ["match_input_image", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
-const SEEDREAM_SIZES = ["auto_2K", "1K", "2K", "4K"];
+const SEEDREAM_SIZES = ["auto_2K", "auto_4K", "1K", "2K", "4K"];
+// Seedream Edit uses different size presets
+const SEEDREAM_EDIT_SIZES = ["auto_4K", "auto_2K", "square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"];
 
 type GenerationItem = {
   id: string;
@@ -288,8 +301,12 @@ export default function ProjectWorkspace() {
         } else if (currentModel === "google-nano-banana") {
           requestBody.imageInputs = currentInputImage ? [currentInputImage] : [];
           requestBody.aspectRatio = currentAspectRatio;
+        } else if (currentModel === "seedream-edit") {
+          // Seedream Edit uses imageSize presets and requires image inputs
+          requestBody.imageInputs = currentInputImage ? [currentInputImage] : [];
+          requestBody.imageSize = currentImageSize;
         } else if (currentModel === "seedream") {
-          // Seedream uses imageSize instead of aspectRatio, and no image inputs
+          // Seedream text-to-image uses imageSize, no image inputs
           requestBody.imageSize = currentImageSize;
         }
 
@@ -568,11 +585,15 @@ export default function ProjectWorkspace() {
                           key={opt.value}
                           onClick={() => {
                             setSelectedModel(opt.value);
-                            // Reset aspect ratio when changing models
+                            // Reset settings when changing models
                             if (opt.value === "google-nano-banana") {
                               setAspectRatio("match_input_image");
                             } else if (opt.value === "nano-banana-pro") {
                               setAspectRatio("auto");
+                            } else if (opt.value === "seedream-edit") {
+                              setImageSize("auto_4K");
+                            } else if (opt.value === "seedream") {
+                              setImageSize("auto_2K");
                             }
                           }}
                           className={cn(
@@ -589,7 +610,7 @@ export default function ProjectWorkspace() {
                     </div>
                   </div>
 
-                  {/* Seedream: Image Size */}
+                  {/* Seedream Text-to-Image: Image Size */}
                   {selectedModel === "seedream" && (
                     <div>
                       <span className="text-xs text-zinc-500 uppercase tracking-wide">Image Size</span>
@@ -597,14 +618,28 @@ export default function ProjectWorkspace() {
                         {SEEDREAM_SIZES.map((size) => (
                           <button key={size} onClick={() => setImageSize(size as ImageSize)}
                             className={cn("px-2 py-1 text-xs rounded-md transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-800 text-zinc-400 hover:text-white")}
-                          >{size === "auto_2K" ? "Auto 2K" : size}</button>
+                          >{size === "auto_2K" ? "Auto 2K" : size === "auto_4K" ? "Auto 4K" : size}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Seedream Edit: Size Presets */}
+                  {selectedModel === "seedream-edit" && (
+                    <div>
+                      <span className="text-xs text-zinc-500 uppercase tracking-wide">Output Size</span>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {SEEDREAM_EDIT_SIZES.map((size) => (
+                          <button key={size} onClick={() => setImageSize(size as ImageSize)}
+                            className={cn("px-2 py-1 text-xs rounded-md transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-800 text-zinc-400 hover:text-white")}
+                          >{size === "auto_4K" ? "Auto 4K" : size === "auto_2K" ? "Auto 2K" : size.replace("_", " ")}</button>
                         ))}
                       </div>
                     </div>
                   )}
 
                   {/* Nano Banana Pro / Google: Aspect Ratio */}
-                  {selectedModel !== "seedream" && (
+                  {(selectedModel === "nano-banana-pro" || selectedModel === "google-nano-banana") && (
                     <div>
                       <span className="text-xs text-zinc-500 uppercase tracking-wide">Aspect Ratio</span>
                       <div className="flex flex-wrap gap-1 mt-1.5">
@@ -978,7 +1013,7 @@ export default function ProjectWorkspace() {
                 </button>
                 
                 {mobileShowModel && (
-                  <div className="grid grid-cols-3 gap-1.5 p-2 bg-zinc-800/30 rounded-xl">
+                  <div className="grid grid-cols-2 gap-1.5 p-2 bg-zinc-800/30 rounded-xl">
                     {MODEL_OPTIONS.map((opt) => (
                       <button
                         key={opt.value}
@@ -986,6 +1021,8 @@ export default function ProjectWorkspace() {
                           setSelectedModel(opt.value);
                           if (opt.value === "google-nano-banana") setAspectRatio("match_input_image");
                           else if (opt.value === "nano-banana-pro") setAspectRatio("auto");
+                          else if (opt.value === "seedream-edit") setImageSize("auto_4K");
+                          else if (opt.value === "seedream") setImageSize("auto_2K");
                         }}
                         className={cn(
                           "px-2 py-2 rounded-lg text-center transition-colors",
@@ -995,7 +1032,7 @@ export default function ProjectWorkspace() {
                         )}
                       >
                         <p className={cn("text-xs font-medium truncate", selectedModel === opt.value ? "text-lime-400" : "text-white")}>
-                          {opt.label.replace("Nano Banana", "Banana").replace("Seedream", "Seedream")}
+                          {opt.label}
                         </p>
                       </button>
                     ))}
@@ -1010,7 +1047,11 @@ export default function ProjectWorkspace() {
                   <div className="flex items-center gap-2">
                     <Settings2 className="w-4 h-4 text-zinc-400" />
                     <span className="text-sm text-zinc-300">
-                      {selectedModel === "seedream" ? imageSize : `${aspectRatio} • ${resolution}`}
+                      {selectedModel === "seedream" || selectedModel === "seedream-edit" 
+                        ? imageSize.replace("_", " ") 
+                        : selectedModel === "nano-banana-pro" 
+                          ? `${aspectRatio} • ${resolution}` 
+                          : aspectRatio}
                     </span>
                   </div>
                   <ChevronDown className={cn("w-4 h-4 text-zinc-500 transition-transform", mobileShowSettings && "rotate-180")} />
@@ -1018,7 +1059,7 @@ export default function ProjectWorkspace() {
 
                 {mobileShowSettings && (
                   <div className="p-3 bg-zinc-800/30 rounded-xl space-y-3">
-                    {/* Seedream: Image Size */}
+                    {/* Seedream Text-to-Image: Image Size */}
                     {selectedModel === "seedream" && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-zinc-500 w-10">Size</span>
@@ -1026,14 +1067,28 @@ export default function ProjectWorkspace() {
                           {SEEDREAM_SIZES.map((size) => (
                             <button key={size} onClick={() => setImageSize(size as ImageSize)}
                               className={cn("px-2.5 py-1.5 text-xs rounded-lg transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-700 text-zinc-400")}
-                            >{size === "auto_2K" ? "Auto" : size}</button>
+                            >{size === "auto_2K" ? "Auto 2K" : size === "auto_4K" ? "Auto 4K" : size}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Seedream Edit: Size Presets */}
+                    {selectedModel === "seedream-edit" && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-500 w-10">Size</span>
+                        <div className="flex flex-wrap gap-1.5 flex-1">
+                          {SEEDREAM_EDIT_SIZES.slice(0, 6).map((size) => (
+                            <button key={size} onClick={() => setImageSize(size as ImageSize)}
+                              className={cn("px-2.5 py-1.5 text-xs rounded-lg transition-colors", imageSize === size ? "bg-lime-400 text-black font-medium" : "bg-zinc-700 text-zinc-400")}
+                            >{size === "auto_4K" ? "4K" : size === "auto_2K" ? "2K" : size.replace("_", " ")}</button>
                           ))}
                         </div>
                       </div>
                     )}
 
                     {/* Aspect Ratio */}
-                    {selectedModel !== "seedream" && (
+                    {(selectedModel === "nano-banana-pro" || selectedModel === "google-nano-banana") && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-zinc-500 w-10">Ratio</span>
                         <div className="flex flex-wrap gap-1.5 flex-1">
