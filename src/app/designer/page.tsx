@@ -1180,6 +1180,45 @@ export default function DesignerPage() {
     []
   );
 
+  // Rename a category (change its key)
+  const renameCategory = useCallback(
+    (section: "shell" | "interior", oldName: string, newName: string) => {
+      if (oldName === newName) return;
+      
+      setDesignJSON((prev) => {
+        const sectionData = prev[section] as Record<string, DesignCategory>;
+        const category = sectionData[oldName];
+        
+        // Create new section data without the old key, with the new key
+        const newSectionData: Record<string, DesignCategory> = {};
+        Object.entries(sectionData).forEach(([key, value]) => {
+          if (key === oldName) {
+            newSectionData[newName] = value;
+          } else {
+            newSectionData[key] = value;
+          }
+        });
+        
+        return {
+          ...prev,
+          [section]: newSectionData,
+        };
+      });
+      
+      // Update expanded categories if needed
+      setExpandedCategories((prev) => {
+        if (prev.has(oldName)) {
+          const newSet = new Set(prev);
+          newSet.delete(oldName);
+          newSet.add(newName);
+          return newSet;
+        }
+        return prev;
+      });
+    },
+    []
+  );
+
   // Auto-expand categories with content
   const autoExpandCategories = useCallback((design: DesignJSON) => {
     const newExpanded = new Set<string>();
@@ -1273,8 +1312,9 @@ export default function DesignerPage() {
     }
 
     try {
-      // Compress image to reduce payload size (Vercel has ~4.5MB limit)
-      const compressedDataUrl = await compressImage(file, 1024, 0.85);
+      // Compress image aggressively (Vercel has ~4.5MB limit for entire request)
+      // 768px max dimension + 70% quality keeps base64 around 100-300KB
+      const compressedDataUrl = await compressImage(file, 768, 0.7);
       setUploadedImages((prev) => [...prev, compressedDataUrl]);
       setGenerationError(null);
     } catch (error) {
@@ -1354,7 +1394,8 @@ export default function DesignerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           prompt: effectivePrompt,
-          images: uploadedImages.length > 0 ? uploadedImages : undefined,
+          // Only send first image to keep payload under Vercel's 4.5MB limit
+          images: uploadedImages.length > 0 ? [uploadedImages[0]] : undefined,
           roomName: selectedRoom?.name,
         }),
       });
@@ -2479,6 +2520,9 @@ export default function DesignerPage() {
                           onDeleteItem={(itemId) =>
                             deleteItem("shell", key, itemId)
                           }
+                          onRenameCategory={(newName) =>
+                            renameCategory("shell", key, newName)
+                          }
                         />
                       ))}
                     </div>
@@ -2529,6 +2573,9 @@ export default function DesignerPage() {
                             }
                             onDeleteItem={(itemId) =>
                               deleteItem("interior", key, itemId)
+                            }
+                            onRenameCategory={(newName) =>
+                              renameCategory("interior", key, newName)
                             }
                           />
                         )
