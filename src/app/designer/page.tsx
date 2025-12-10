@@ -398,7 +398,7 @@ function CategorySection({
                   }
                 />
               ))}
-              {isEditable && (onAddMaterial || onUpdateMaterialsOverall) && (
+              {isEditable && (
                 <AddTagInput
                   variant="material"
                   placeholder="Add material..."
@@ -1259,45 +1259,156 @@ export default function DesignerPage() {
       {/* MAIN CONTENT AREA */}
       {/* ============================================ */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Mobile */}
+        {/* Header */}
         <div className="flex-shrink-0 px-3 sm:px-4 py-3 border-b border-white/5 bg-black/20">
-          {/* Top row - Logo and actions */}
-          <div className="flex items-center justify-between mb-3 lg:mb-0">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Link
-                href="/"
-                className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity"
-              >
-                <span className="text-xl sm:text-2xl">🍌</span>
-                <span className="font-bold text-lg sm:text-xl text-lime-400 hidden sm:inline">Banana</span>
-              </Link>
-              <div className="w-px h-5 sm:h-6 bg-zinc-800 hidden sm:block" />
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-violet-500/10 rounded-lg flex items-center justify-center">
-                  <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-400" />
+          {/* Desktop: Single row | Mobile: Two rows */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-4">
+            {/* Left side - Logo, Title, Selectors */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2">
+              {/* Logo and Title */}
+              <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Link
+                    href="/"
+                    className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity"
+                  >
+                    <span className="text-xl sm:text-2xl">🍌</span>
+                    <span className="font-bold text-lg sm:text-xl text-lime-400 hidden sm:inline">Banana</span>
+                  </Link>
+                  <div className="w-px h-5 sm:h-6 bg-zinc-800 hidden sm:block" />
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 bg-violet-500/10 rounded-lg flex items-center justify-center">
+                      <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-400" />
+                    </div>
+                    <span className="text-base sm:text-lg font-semibold text-white">Designer</span>
+                  </div>
                 </div>
-                <span className="text-base sm:text-lg font-semibold text-white">Designer</span>
+                
+                {/* Mobile-only action buttons */}
+                <div className="flex items-center gap-1 sm:hidden">
+                  {selectedRoom && hasUnsavedChanges && (
+                    <button
+                      onClick={saveDesign}
+                      disabled={isSaving}
+                      className="p-2 text-violet-400 hover:bg-violet-500/20 rounded-lg transition-colors"
+                    >
+                      {isSaving ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Save className="w-5 h-5" />
+                      )}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                  >
+                    {sidebarCollapsed ? (
+                      <PanelRight className="w-5 h-5" />
+                    ) : (
+                      <PanelRightClose className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              
+              {/* Divider - Desktop only */}
+              <div className="w-px h-6 bg-zinc-800 hidden lg:block" />
+              
+              {/* Project & Room Selectors */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Project Selector */}
+                <div className="relative flex-1 min-w-[140px] sm:flex-none">
+                  <select
+                    value={selectedProject?.id || ""}
+                    onChange={(e) => {
+                      const project = projects.find((p) => p.id === e.target.value);
+                      setSelectedProject(project || null);
+                      setSelectedRoom(null);
+                    }}
+                    disabled={isLoadingProjects}
+                    className="w-full sm:w-auto appearance-none bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 sm:py-1.5 pr-8 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">Select Project</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                  <FolderOpen className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                </div>
+
+                {/* Room Selector (only show when project selected) */}
+                {selectedProject && (
+                  <>
+                    <ChevronRight className="w-4 h-4 text-zinc-600 hidden sm:block" />
+                    <div className="flex items-center gap-1 flex-1 min-w-[140px] sm:flex-none">
+                      <div className="relative flex-1 sm:flex-none">
+                        <select
+                          value={selectedRoom?.id || ""}
+                          onChange={(e) => {
+                            if (e.target.value === "__new__") {
+                              setShowNewRoomInput(true);
+                            } else {
+                              const room = rooms.find((r) => r.id === e.target.value);
+                              setSelectedRoom(room || null);
+                            }
+                          }}
+                          disabled={isLoadingRooms}
+                          className="w-full sm:w-auto appearance-none bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 sm:py-1.5 pr-8 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer disabled:opacity-50"
+                        >
+                          <option value="">Select Room</option>
+                          {rooms.map((room) => (
+                            <option key={room.id} value={room.id}>
+                              {room.name}
+                            </option>
+                          ))}
+                          <option value="__new__">+ New Room</option>
+                        </select>
+                        <DoorClosed className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                      </div>
+                      {selectedRoom && (
+                        <button
+                          onClick={() => setShowDeleteConfirm(true)}
+                          className="p-2 sm:p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          title={`Delete ${selectedRoom.name}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Save indicator - Desktop inline */}
+                {selectedRoom && (
+                  <button
+                    onClick={saveDesign}
+                    disabled={isSaving || !hasUnsavedChanges}
+                    className={cn(
+                      "hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors",
+                      hasUnsavedChanges
+                        ? "bg-violet-500/20 text-violet-300 hover:bg-violet-500/30"
+                        : "bg-zinc-800 text-zinc-500"
+                    )}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    {hasUnsavedChanges ? "Save" : "Saved"}
+                  </button>
+                )}
               </div>
             </div>
             
-            <div className="flex items-center gap-1">
-              {/* Save button - Mobile */}
-              {selectedRoom && hasUnsavedChanges && (
-                <button
-                  onClick={saveDesign}
-                  disabled={isSaving}
-                  className="p-2 sm:hidden text-violet-400 hover:bg-violet-500/20 rounded-lg transition-colors"
-                >
-                  {isSaving ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Save className="w-5 h-5" />
-                  )}
-                </button>
-              )}
+            {/* Right side - Action buttons (Desktop only) */}
+            <div className="hidden sm:flex items-center gap-1">
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors lg:hidden"
                 title={sidebarCollapsed ? "Open panel" : "Close panel"}
               >
                 {sidebarCollapsed ? (
@@ -1314,94 +1425,6 @@ export default function DesignerPage() {
                 <Home className="w-5 h-5" />
               </Link>
             </div>
-          </div>
-          
-          {/* Project & Room Selectors - Responsive */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Project Selector */}
-            <div className="relative flex-1 min-w-[140px] sm:flex-none">
-              <select
-                value={selectedProject?.id || ""}
-                onChange={(e) => {
-                  const project = projects.find((p) => p.id === e.target.value);
-                  setSelectedProject(project || null);
-                  setSelectedRoom(null);
-                }}
-                disabled={isLoadingProjects}
-                className="w-full sm:w-auto appearance-none bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 sm:py-1.5 pr-8 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer disabled:opacity-50"
-              >
-                <option value="">Select Project</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-              <FolderOpen className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
-            </div>
-
-            {/* Room Selector (only show when project selected) */}
-            {selectedProject && (
-              <>
-                <ChevronRight className="w-4 h-4 text-zinc-600 hidden sm:block" />
-                <div className="flex items-center gap-1 flex-1 min-w-[140px] sm:flex-none">
-                  <div className="relative flex-1 sm:flex-none">
-                    <select
-                      value={selectedRoom?.id || ""}
-                      onChange={(e) => {
-                        if (e.target.value === "__new__") {
-                          setShowNewRoomInput(true);
-                        } else {
-                          const room = rooms.find((r) => r.id === e.target.value);
-                          setSelectedRoom(room || null);
-                        }
-                      }}
-                      disabled={isLoadingRooms}
-                      className="w-full sm:w-auto appearance-none bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 sm:py-1.5 pr-8 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer disabled:opacity-50"
-                    >
-                      <option value="">Select Room</option>
-                      {rooms.map((room) => (
-                        <option key={room.id} value={room.id}>
-                          {room.name}
-                        </option>
-                      ))}
-                      <option value="__new__">+ New Room</option>
-                    </select>
-                    <DoorClosed className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
-                  </div>
-                  {selectedRoom && (
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="p-2 sm:p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                      title={`Delete ${selectedRoom.name}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* Save indicator - Desktop */}
-            {selectedRoom && (
-              <button
-                onClick={saveDesign}
-                disabled={isSaving || !hasUnsavedChanges}
-                className={cn(
-                  "hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ml-auto",
-                  hasUnsavedChanges
-                    ? "bg-violet-500/20 text-violet-300 hover:bg-violet-500/30"
-                    : "bg-zinc-800 text-zinc-500"
-                )}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
-                {hasUnsavedChanges ? "Save" : "Saved"}
-              </button>
-            )}
           </div>
         </div>
 
