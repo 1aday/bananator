@@ -574,8 +574,8 @@ export default function DesignerPage() {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  // UI state
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // UI state - sidebar starts collapsed on mobile
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(["shell", "interior"])
   );
@@ -584,6 +584,7 @@ export default function DesignerPage() {
   );
   const [showJsonInput, setShowJsonInput] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showModelSelector, setShowModelSelector] = useState(false);
 
   // Image rendering state
   const [selectedModel, setSelectedModel] = useState<ModelType>("nano-banana-pro");
@@ -1151,9 +1152,30 @@ export default function DesignerPage() {
     setUploadedImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  // Generate design from prompt
+  // Check if design has any content (moved before generateDesign to avoid reference error)
+  const hasContent =
+    designJSON.meta.title ||
+    designJSON.meta.style_tags.length > 0 ||
+    Object.values(designJSON.shell).some(
+      (cat) => cat.materials_overall.length > 0 || cat.items.length > 0
+    ) ||
+    Object.values(designJSON.interior).some(
+      (cat) => cat.materials_overall.length > 0 || cat.items.length > 0
+    );
+
+  // Generate design from prompt (or regenerate existing)
   const generateDesign = useCallback(async () => {
-    if (!prompt.trim()) return;
+    // Build the prompt - use new prompt, or create regeneration prompt from existing design
+    let effectivePrompt = prompt.trim();
+    
+    if (!effectivePrompt && hasContent) {
+      // Regenerate based on existing design
+      const styleTags = designJSON.meta.style_tags.join(", ");
+      const title = designJSON.meta.title || "";
+      effectivePrompt = `Regenerate and refine: ${title}. Style: ${styleTags}. Keep the same overall concept but enhance the details.`;
+    }
+    
+    if (!effectivePrompt) return;
 
     setIsGenerating(true);
     setGenerationError(null);
@@ -1163,7 +1185,7 @@ export default function DesignerPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          prompt,
+          prompt: effectivePrompt,
           images: uploadedImages.length > 0 ? uploadedImages : undefined,
           roomName: selectedRoom?.name,
         }),
@@ -1211,7 +1233,7 @@ export default function DesignerPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, uploadedImages, autoExpandCategories]);
+  }, [prompt, uploadedImages, autoExpandCategories, hasContent, designJSON, selectedRoom, renderDesignImageWithDesign]);
 
   // Copy JSON to clipboard
   const copyJSON = useCallback(() => {
@@ -1228,17 +1250,6 @@ export default function DesignerPage() {
     setGenerationError(null);
     setUploadedImages([]);
   }, []);
-
-  // Check if design has any content
-  const hasContent =
-    designJSON.meta.title ||
-    designJSON.meta.style_tags.length > 0 ||
-    Object.values(designJSON.shell).some(
-      (cat) => cat.materials_overall.length > 0 || cat.items.length > 0
-    ) ||
-    Object.values(designJSON.interior).some(
-      (cat) => cat.materials_overall.length > 0 || cat.items.length > 0
-    );
 
   const totalItems = countDesignItems(designJSON);
 
@@ -1560,74 +1571,78 @@ export default function DesignerPage() {
                     </div>
                     
                     {/* Controls Bar */}
-                    <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {/* Thumbnails for multiple images */}
-                        {uploadedImages.length > 1 && (
-                          <div className="flex items-center gap-2">
-                            {uploadedImages.map((img, i) => (
-                              <button
-                                key={i}
-                                className={cn(
-                                  "w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
-                                  i === 0 ? "border-violet-500" : "border-zinc-700 opacity-60 hover:opacity-100"
-                                )}
-                              >
-                                <img src={img} alt={`Ref ${i + 1}`} className="w-full h-full object-cover" />
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-zinc-500">Before</span>
-                          <span className="text-zinc-600">→</span>
-                          <span className={cn(
-                            isGenerating && !hasContent ? "text-amber-400" :
-                            isRenderingImage ? "text-violet-400" : 
-                            renderedImage ? "text-lime-400" : "text-zinc-500"
-                          )}>
-                            {isGenerating && !hasContent ? (
-                              <span className="flex items-center gap-1.5">
-                                <span className="relative flex h-2 w-2">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                                </span>
-                                Generating design...
-                              </span>
-                            ) : isRenderingImage ? (
-                              <span className="flex items-center gap-1.5">
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                Rendering...
-                              </span>
-                            ) : renderedImage ? "After" : "Ready"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {renderError && (
-                          <span className="text-xs text-red-400 mr-2">{renderError}</span>
-                        )}
-                        <button
-                          onClick={() => {
-                            setRenderedImage(null);
-                            setUploadedImages([]);
-                          }}
-                          className="px-3 py-1.5 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                        >
-                          Clear
-                        </button>
-                        <button
-                          onClick={renderDesignImage}
-                          disabled={isRenderingImage || !hasContent}
-                          className="flex items-center gap-2 px-4 py-1.5 bg-violet-500 hover:bg-violet-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
-                        >
-                          {isRenderingImage ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Wand2 className="w-4 h-4" />
+                    <div className="px-3 sm:px-4 py-3 border-t border-zinc-800">
+                      {/* Mobile: Stack layout */}
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {/* Thumbnails for multiple images */}
+                          {uploadedImages.length > 1 && (
+                            <div className="flex items-center gap-2">
+                              {uploadedImages.map((img, i) => (
+                                <button
+                                  key={i}
+                                  className={cn(
+                                    "w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
+                                    i === 0 ? "border-violet-500" : "border-zinc-700 opacity-60 hover:opacity-100"
+                                  )}
+                                >
+                                  <img src={img} alt={`Ref ${i + 1}`} className="w-full h-full object-cover" />
+                                </button>
+                              ))}
+                            </div>
                           )}
-                          {renderedImage ? "Re-render" : "Render Design"}
-                        </button>
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-zinc-500">Before</span>
+                            <span className="text-zinc-600">→</span>
+                            <span className={cn(
+                              isGenerating && !hasContent ? "text-amber-400" :
+                              isRenderingImage ? "text-violet-400" : 
+                              renderedImage ? "text-lime-400" : "text-zinc-500"
+                            )}>
+                              {isGenerating && !hasContent ? (
+                                <span className="flex items-center gap-1.5">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                  </span>
+                                  <span className="hidden sm:inline">Generating design...</span>
+                                  <span className="sm:hidden">Generating...</span>
+                                </span>
+                              ) : isRenderingImage ? (
+                                <span className="flex items-center gap-1.5">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Rendering...
+                                </span>
+                              ) : renderedImage ? "After" : "Ready"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {renderError && (
+                            <span className="text-xs text-red-400 mr-2 hidden sm:inline">{renderError}</span>
+                          )}
+                          <button
+                            onClick={() => {
+                              setRenderedImage(null);
+                              setUploadedImages([]);
+                            }}
+                            className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 rounded-lg transition-colors"
+                          >
+                            Clear
+                          </button>
+                          <button
+                            onClick={renderDesignImage}
+                            disabled={isRenderingImage || !hasContent}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 sm:py-1.5 bg-violet-500 hover:bg-violet-600 active:bg-violet-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
+                          >
+                            {isRenderingImage ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Wand2 className="w-4 h-4" />
+                            )}
+                            {renderedImage ? "Re-render" : "Render"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1646,9 +1661,9 @@ export default function DesignerPage() {
                     </div>
                   </div>
                 ) : (designJSON.meta.title || designJSON.meta.style_tags.length > 0) ? (
-                  <div className="bg-gradient-to-br from-violet-500/10 to-lime-500/10 rounded-2xl p-6 border border-violet-500/20">
+                  <div className="bg-gradient-to-br from-violet-500/10 to-lime-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-violet-500/20">
                     {designJSON.meta.title && (
-                      <h2 className="text-2xl font-bold text-white mb-2">
+                      <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">
                         {designJSON.meta.title}
                       </h2>
                     )}
@@ -1683,77 +1698,6 @@ export default function DesignerPage() {
                           updateStyleTags([...designJSON.meta.style_tags, value]);
                         }}
                       />
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Design Summary Cards - with skeleton loading */}
-                {isGenerating && !hasContent ? (
-                  /* Skeleton for Summary Cards */
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800 animate-pulse">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-5 h-5 bg-zinc-800 rounded" />
-                        <div className="h-5 bg-zinc-800 rounded w-16" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="h-4 bg-zinc-800/60 rounded w-full" />
-                        <div className="h-4 bg-zinc-800/60 rounded w-3/4" />
-                        <div className="h-4 bg-zinc-800/60 rounded w-5/6" />
-                      </div>
-                    </div>
-                    <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800 animate-pulse">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-5 h-5 bg-zinc-800 rounded" />
-                        <div className="h-5 bg-zinc-800 rounded w-20" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="h-4 bg-zinc-800/60 rounded w-full" />
-                        <div className="h-4 bg-zinc-800/60 rounded w-2/3" />
-                        <div className="h-4 bg-zinc-800/60 rounded w-4/5" />
-                      </div>
-                    </div>
-                  </div>
-                ) : hasContent ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    {/* Shell Summary */}
-                    <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Box className="w-5 h-5 text-amber-400" />
-                        <h3 className="font-semibold text-white">Shell</h3>
-                      </div>
-                      <div className="space-y-2">
-                        {Object.entries(designJSON.shell).map(([key, value]) => {
-                          const cat = value as DesignCategory;
-                          if (cat.items.length === 0 && cat.materials_overall.length === 0) return null;
-                          return (
-                            <div key={key} className="flex items-center justify-between text-sm">
-                              <span className="text-zinc-400">{formatCategoryName(key)}</span>
-                              <span className="text-zinc-200">{cat.items.length} items</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Interior Summary */}
-                    <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Sofa className="w-5 h-5 text-violet-400" />
-                        <h3 className="font-semibold text-white">Interior</h3>
-                      </div>
-                      <div className="space-y-2">
-                        {Object.entries(designJSON.interior).map(([key, value]) => {
-                          const cat = value as DesignCategory;
-                          if (cat.items.length === 0 && cat.materials_overall.length === 0) return null;
-                          return (
-                            <div key={key} className="flex items-center justify-between text-sm">
-                              <span className="text-zinc-400">{formatCategoryName(key)}</span>
-                              <span className="text-zinc-200">{cat.items.length} items</span>
-                            </div>
-                          );
-                        })}
-                      </div>
                     </div>
                   </div>
                 ) : null}
@@ -1803,14 +1747,15 @@ export default function DesignerPage() {
                         <button
                           onClick={renderDesignImage}
                           disabled={isRenderingImage}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-violet-500/20 hover:bg-violet-500/30 disabled:bg-zinc-800 disabled:text-zinc-600 text-violet-300 text-sm rounded-lg border border-violet-500/30 transition-colors"
+                          className="flex items-center gap-2 px-3 py-2 sm:py-1.5 bg-violet-500/20 hover:bg-violet-500/30 active:bg-violet-500/40 disabled:bg-zinc-800 disabled:text-zinc-600 text-violet-300 text-sm rounded-lg border border-violet-500/30 transition-colors"
                         >
                           {isRenderingImage ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
                             <Wand2 className="w-4 h-4" />
                           )}
-                          Regenerate Image
+                          <span className="hidden sm:inline">Regenerate Image</span>
+                          <span className="sm:hidden">Regenerate</span>
                         </button>
                       )}
                     </div>
@@ -1989,7 +1934,7 @@ export default function DesignerPage() {
       </div>
 
       {/* ============================================ */}
-      {/* RIGHT SIDEBAR - Mobile overlay / Desktop sidebar */}
+      {/* RIGHT SIDEBAR - Mobile overlay / Desktop always visible */}
       {/* ============================================ */}
       {/* Mobile backdrop */}
       {!sidebarCollapsed && (
@@ -2003,16 +1948,18 @@ export default function DesignerPage() {
           "fixed lg:relative inset-y-0 right-0 z-50 lg:z-auto",
           "bg-zinc-950 lg:bg-black/40 border-l border-white/5 flex flex-col",
           "transition-all duration-300 ease-in-out",
-          "w-full sm:w-96 lg:flex-shrink-0",
+          "w-full sm:w-[420px] lg:w-[420px] lg:flex-shrink-0",
+          // Mobile: slide in/out based on collapsed state
+          // Desktop (lg:): always visible
           sidebarCollapsed 
-            ? "translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden" 
-            : "translate-x-0 lg:w-96"
+            ? "translate-x-full lg:translate-x-0" 
+            : "translate-x-0"
         )}
       >
         {/* Design Structure Viewer */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="p-4 border-b border-white/5">
+          <div className="p-4 lg:p-5 border-b border-white/5">
             {/* Mobile close button */}
             <div className="flex items-center justify-between mb-3 lg:hidden">
               <span className="text-lg font-semibold text-white">Design Panel</span>
@@ -2260,7 +2207,7 @@ export default function DesignerPage() {
         </div>
 
         {/* Image Upload & Prompt Input */}
-        <div className="p-3 sm:p-4 border-t border-white/5 space-y-3 pb-safe">
+        <div className="p-4 lg:p-5 border-t border-white/5 space-y-4 pb-safe">
           {/* Error display */}
           {generationError && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2">
@@ -2365,51 +2312,66 @@ export default function DesignerPage() {
             />
           </div>
 
-          {/* Model Selector */}
+          {/* Model Selector - Collapsible */}
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-zinc-300">Render Model</span>
-              <span className="text-xs text-zinc-500">for image generation</span>
-            </div>
-            <div className="grid grid-cols-1 gap-2">
-              {MODEL_OPTIONS.map((model) => (
-                <button
-                  key={model.value}
-                  onClick={() => setSelectedModel(model.value)}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all",
-                    selectedModel === model.value
-                      ? "bg-violet-500/20 border border-violet-500/50"
-                      : "bg-zinc-900 border border-zinc-800 hover:border-zinc-700"
-                  )}
-                >
-                  <div className={cn(
-                    "w-3 h-3 rounded-full border-2",
-                    selectedModel === model.value
-                      ? "border-violet-400 bg-violet-400"
-                      : "border-zinc-600"
-                  )} />
-                  <div className="flex-1 min-w-0">
-                    <p className={cn(
-                      "text-sm font-medium",
-                      selectedModel === model.value ? "text-violet-300" : "text-zinc-300"
-                    )}>
-                      {model.label}
-                    </p>
-                    <p className="text-xs text-zinc-500 truncate">{model.description}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={() => setShowModelSelector(!showModelSelector)}
+              className="w-full flex items-center justify-between py-2 text-left group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-zinc-300">Render Model</span>
+                <span className="text-xs text-zinc-500">•</span>
+                <span className="text-xs text-violet-400">{MODEL_OPTIONS.find(m => m.value === selectedModel)?.label}</span>
+              </div>
+              <ChevronDown className={cn(
+                "w-4 h-4 text-zinc-500 transition-transform",
+                showModelSelector && "rotate-180"
+              )} />
+            </button>
+            {showModelSelector && (
+              <div className="grid grid-cols-1 gap-2 mt-2">
+                {MODEL_OPTIONS.map((model) => (
+                  <button
+                    key={model.value}
+                    onClick={() => {
+                      setSelectedModel(model.value);
+                      setShowModelSelector(false);
+                    }}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all",
+                      selectedModel === model.value
+                        ? "bg-violet-500/20 border border-violet-500/50"
+                        : "bg-zinc-900 border border-zinc-800 hover:border-zinc-700"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-3 h-3 rounded-full border-2",
+                      selectedModel === model.value
+                        ? "border-violet-400 bg-violet-400"
+                        : "border-zinc-600"
+                    )} />
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        "text-sm font-medium",
+                        selectedModel === model.value ? "text-violet-300" : "text-zinc-300"
+                      )}>
+                        {model.label}
+                      </p>
+                      <p className="text-xs text-zinc-500 truncate">{model.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Generate Button */}
+          {/* Generate Button - enabled if has prompt OR has existing content to regenerate */}
           <button
             onClick={generateDesign}
-            disabled={!prompt.trim() || isGenerating}
+            disabled={(!prompt.trim() && !hasContent) || isGenerating}
             className={cn(
               "w-full py-3.5 sm:py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all text-base sm:text-sm",
-              !prompt.trim() || isGenerating
+              (!prompt.trim() && !hasContent) || isGenerating
                 ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
                 : "bg-lime-400 text-black hover:bg-lime-300 active:bg-lime-500 shadow-lg shadow-lime-400/20"
             )}
@@ -2422,7 +2384,7 @@ export default function DesignerPage() {
             ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                Generate Design
+                {hasContent && !prompt.trim() ? "Regenerate Design" : "Generate Design"}
                 {uploadedImages.length > 0 && (
                   <span className="text-xs opacity-75">({uploadedImages.length} image{uploadedImages.length > 1 ? 's' : ''})</span>
                 )}
