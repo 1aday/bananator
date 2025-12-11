@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Check, Undo2, Redo2, Pencil, Type, ArrowRight, Circle, Square, Eraser, ChevronDown, Move } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 
 type Tool = "select" | "pen" | "arrow" | "rectangle" | "circle" | "text" | "eraser";
 type HandleType = "nw" | "ne" | "sw" | "se" | "start" | "end" | null;
@@ -72,6 +73,7 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [resizeInitialAction, setResizeInitialAction] = useState<DrawAction | null>(null);
   const [hoveringHandle, setHoveringHandle] = useState<HandleType>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
 
@@ -824,32 +826,109 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedActionId, onCancel, handleDeleteSelected]);
 
-  const handleSave = useCallback(() => {
-    if (!canvasRef.current || !imageRef.current) return;
+  const handleSave = useCallback(async () => {
+    if (!canvasRef.current || !imageRef.current || isSaving) return;
 
-    // Deselect before saving
-    setSelectedActionId(null);
+    setIsSaving(true);
+    
+    try {
+      // Deselect before saving
+      setSelectedActionId(null);
 
     // Create a new canvas to composite image + annotations
     const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = imageDimensions.width;
-    exportCanvas.height = imageDimensions.height;
+    
+    // Limit canvas size to prevent "image too large" errors
+    // Max dimension of 4096px to stay within reasonable limits
+    const MAX_DIMENSION = 4096;
+    let exportWidth = imageDimensions.width;
+    let exportHeight = imageDimensions.height;
+    
+    if (exportWidth > MAX_DIMENSION || exportHeight > MAX_DIMENSION) {
+      const scale = Math.min(MAX_DIMENSION / exportWidth, MAX_DIMENSION / exportHeight);
+      exportWidth = Math.floor(exportWidth * scale);
+      exportHeight = Math.floor(exportHeight * scale);
+    }
+    
+    exportCanvas.width = exportWidth;
+    exportCanvas.height = exportHeight;
     const exportCtx = exportCanvas.getContext("2d");
     
     if (!exportCtx) return;
 
-    // Draw original image
-    exportCtx.drawImage(imageRef.current, 0, 0);
+    // Scale and draw original image
+    exportCtx.drawImage(imageRef.current, 0, 0, exportWidth, exportHeight);
     
     // Draw annotations on top (without selection highlight)
+    // Scale annotation coordinates if canvas was resized
+    const scaleX = exportWidth / imageDimensions.width;
+    const scaleY = exportHeight / imageDimensions.height;
+    
     exportCtx.lineCap = "round";
     exportCtx.lineJoin = "round";
+    exportCtx.save();
+    exportCtx.scale(scaleX, scaleY);
     actions.forEach(action => drawAction(exportCtx, action, false));
+    exportCtx.restore();
 
-    // Export as data URL
-    const dataUrl = exportCanvas.toDataURL("image/png");
-    onSave(dataUrl);
-  }, [imageDimensions, onSave, actions]);
+    // Convert canvas to blob and upload to Supabase
+    try {
+      await new Promise<void>((resolve, reject) => {
+        exportCanvas.toBlob(async (blob) => {
+          try {
+            if (!blob) {
+              console.error("Failed to convert canvas to blob");
+              // Fallback to data URL if blob conversion fails
+              const dataUrl = exportCanvas.toDataURL("image/png");
+              onSave(dataUrl);
+              resolve();
+              return;
+            }
+
+            // Upload to Supabase storage
+            const fileName = `annotations/${Date.now()}-${crypto.randomUUID()}.png`;
+            
+            const { error: uploadError } = await supabase.storage
+              .from("generated-images")
+              .upload(fileName, blob, {
+                contentType: "image/png",
+                cacheControl: "3600",
+              });
+
+            if (uploadError) {
+              console.error("Failed to upload annotated image:", uploadError);
+              // Fallback to data URL if upload fails
+              const dataUrl = exportCanvas.toDataURL("image/png");
+              onSave(dataUrl);
+              resolve();
+              return;
+            }
+
+            // Get public URL
+            const { data: urlData } = supabase.storage
+              .from("generated-images")
+              .getPublicUrl(fileName);
+
+            onSave(urlData.publicUrl);
+            resolve();
+          } catch (error) {
+            console.error("Error in blob processing:", error);
+            // Fallback to data URL if anything fails
+            const dataUrl = exportCanvas.toDataURL("image/png");
+            onSave(dataUrl);
+            resolve();
+          }
+        }, "image/png", 0.95); // Use PNG with 95% quality to reduce size
+      });
+    } catch (error) {
+      console.error("Error saving annotated image:", error);
+      // Fallback to data URL if anything fails
+      const dataUrl = exportCanvas.toDataURL("image/png");
+      onSave(dataUrl);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [imageDimensions, onSave, actions, isSaving]);
 
   // Get cursor based on what's under it
   const getCursor = (): string => {
@@ -1048,8 +1127,9 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
           </button>
           <button
             onClick={handleSave}
-            className="p-2 text-lime-400 hover:bg-lime-400/20 rounded-lg transition-all"
-            title="Save"
+            disabled={isSaving}
+            className="p-2 text-lime-400 hover:bg-lime-400/20 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title={isSaving ? "Saving..." : "Save"}
           >
             <Check className="w-4 h-4" />
           </button>
