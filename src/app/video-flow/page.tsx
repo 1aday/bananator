@@ -143,12 +143,24 @@ function VideoFlowPageContent() {
     setError(null);
 
     try {
+      // Upload data URL to Supabase before sending to API to prevent "request too large" errors
+      let uploadedImageUrl = flowState.uploadedImage;
+      if (flowState.uploadedImage.startsWith("data:")) {
+        const { uploadDataUrlToSupabase } = await import("@/lib/image-utils");
+        try {
+          uploadedImageUrl = await uploadDataUrlToSupabase(flowState.uploadedImage, "video-flow");
+        } catch (error) {
+          console.error("Failed to upload image, using original:", error);
+          // Continue with original if upload fails
+        }
+      }
+
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: flowState.prompt,
-          imageInputs: [flowState.uploadedImage],
+          imageInputs: [uploadedImageUrl],
           aspectRatio: "auto",
           resolution: "2K",
           numImages: 1,
