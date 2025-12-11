@@ -8,6 +8,7 @@ import { saveGeneratedImage, getProject, getGeneratedImages, deleteGeneratedImag
 import { PromptLibrary } from "@/components/prompt-library";
 import { Comparison } from "@/components/ui/comparison";
 import { Spinner } from "@/components/ui/spinner";
+import { AnnotateButton } from "@/components/image-annotator";
 import {
   Upload,
   Sparkles,
@@ -34,6 +35,8 @@ import {
   Image as ImageLucide,
   Home,
   Columns,
+  Pencil,
+  Plus,
 } from "lucide-react";
 
 type AspectRatio = "auto" | "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9" | "match_input_image";
@@ -84,7 +87,7 @@ const formatSizeLabel = (size: string): string => {
 
 type GenerationItem = {
   id: string;
-  type: "generation";
+  type: "generation" | "upload" | "annotated";
   inputImage?: string;
   outputImage?: string;
   prompt: string;
@@ -111,8 +114,10 @@ export default function ProjectWorkspace() {
   const [generations, setGenerations] = useState<GenerationItem[]>([]);
   const historyEndRef = useRef<HTMLDivElement>(null);
 
-  // Input state
-  const [inputImage, setInputImage] = useState<string | null>(null);
+  // Input state - supports multiple images
+  const [inputImages, setInputImages] = useState<string[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [originalUploads, setOriginalUploads] = useState<string[]>([]); // Track original uploads separately
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
   
@@ -138,12 +143,46 @@ export default function ProjectWorkspace() {
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const [mobileShowModel, setMobileShowModel] = useState(false);
   const [mobileShowSettings, setMobileShowSettings] = useState(false);
+  const [sheetDragStart, setSheetDragStart] = useState<number | null>(null);
   // Track which images have loaded in the browser
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   
   // Mark image as loaded when browser finishes loading it
   const handleImageLoaded = useCallback((id: string) => {
     setLoadedImages(prev => new Set(prev).add(id));
+  }, []);
+  
+  // Check if cached images are already loaded on mount
+  useEffect(() => {
+    generations.forEach(gen => {
+      if (gen.outputImage && !loadedImages.has(gen.id)) {
+        const img = new Image();
+        img.src = gen.outputImage;
+        // If image is already cached/complete, mark it as loaded
+        if (img.complete) {
+          handleImageLoaded(gen.id);
+        }
+      }
+    });
+  }, [generations, loadedImages, handleImageLoaded]);
+
+  // Handle sheet drag gestures
+  const handleSheetTouchStart = useCallback((e: React.TouchEvent) => {
+    setSheetDragStart(e.touches[0].clientY);
+  }, []);
+
+  const handleSheetTouchMove = useCallback((e: React.TouchEvent) => {
+    if (sheetDragStart === null) return;
+    const deltaY = sheetDragStart - e.touches[0].clientY;
+    // If dragged up more than 30px, expand
+    if (deltaY > 30) {
+      setMobileSheetExpanded(true);
+      setSheetDragStart(null);
+    }
+  }, [sheetDragStart]);
+
+  const handleSheetTouchEnd = useCallback(() => {
+    setSheetDragStart(null);
   }, []);
 
   // Load project and images
@@ -207,33 +246,89 @@ export default function ProjectWorkspace() {
     }
   }, [generations, projectLoading]);
 
-  // File handling
-  const processFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      setError("Please select an image file");
-      return;
+  // File handling - supports multiple images
+  const handleFileSelect = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const fileArray = Array.from(files);
+      const newImages: string[] = [];
+      
+      for (const file of fileArray) {
+        if (!file.type.startsWith("image/")) continue;
+        
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          newImages.push(dataUrl);
+        } catch (err) {
+          console.error("Error reading file:", err);
+        }
+      }
+      
+      if (newImages.length > 0) {
+        setInputImages(prev => [...prev, ...newImages]);
+        setOriginalUploads(prev => [...prev, ...newImages]); // Track original uploads
+        setError(null);
+        
+        // Add uploads to the feed
+        const uploadItems: GenerationItem[] = newImages.map((img, i) => ({
+          id: `upload-${Date.now()}-${i}`,
+          type: "upload" as const,
+          outputImage: img,
+          prompt: "Uploaded image",
+          timestamp: new Date(),
+        }));
+        setGenerations(prev => [...prev, ...uploadItems]);
+      }
     }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setInputImage(e.target?.result as string);
-      setError(null);
-    };
-    reader.readAsDataURL(file);
+    e.target.value = "";
   }, []);
 
-  const handleFileSelect = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) processFile(file);
-    e.target.value = "";
-  }, [processFile]);
-
-  const handleDrop = useCallback((e: DragEvent) => {
+  const handleDrop = useCallback(async (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (file) processFile(file);
-  }, [processFile]);
+    const files = e.dataTransfer?.files;
+    if (files) {
+      const fileArray = Array.from(files);
+      const newImages: string[] = [];
+      
+      for (const file of fileArray) {
+        if (!file.type.startsWith("image/")) continue;
+        
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          newImages.push(dataUrl);
+        } catch (err) {
+          console.error("Error reading file:", err);
+        }
+      }
+      
+      if (newImages.length > 0) {
+        setInputImages(prev => [...prev, ...newImages]);
+        setOriginalUploads(prev => [...prev, ...newImages]); // Track original uploads
+        setError(null);
+        
+        // Add uploads to the feed
+        const uploadItems: GenerationItem[] = newImages.map((img, i) => ({
+          id: `upload-${Date.now()}-${i}`,
+          type: "upload" as const,
+          outputImage: img,
+          prompt: "Uploaded image",
+          timestamp: new Date(),
+        }));
+        setGenerations(prev => [...prev, ...uploadItems]);
+      }
+    }
+  }, []);
 
   const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -247,7 +342,7 @@ export default function ProjectWorkspace() {
 
   // Use generated image as input - auto-switch to compatible model if needed
   const useAsInput = useCallback((imageUrl: string) => {
-    setInputImage(imageUrl);
+    setInputImages(prev => [...prev, imageUrl]);
     
     // If current model doesn't support image input, switch to one that does
     const currentModelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel);
@@ -256,6 +351,33 @@ export default function ProjectWorkspace() {
       setSelectedModel("nano-banana-pro");
       setAspectRatio("auto");
     }
+  }, [selectedModel]);
+
+  // Handle annotated image - add to feed and set as input
+  const handleAnnotatedImage = useCallback((annotatedUrl: string) => {
+    // Add to feed as annotated type
+    const annotatedItem: GenerationItem = {
+      id: `annotated-${Date.now()}`,
+      type: "annotated",
+      outputImage: annotatedUrl,
+      prompt: "Annotated image",
+      timestamp: new Date(),
+    };
+    setGenerations(prev => [...prev, annotatedItem]);
+    
+    // Set as the only input image (replace existing)
+    setInputImages([annotatedUrl]);
+    setSelectedImageIndex(0);
+    
+    // If current model doesn't support image input, switch to one that does
+    const currentModelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel);
+    if (!currentModelInfo?.supportsImageInput) {
+      setSelectedModel("nano-banana-pro");
+      setAspectRatio("auto");
+    }
+    
+    // Open mobile sheet
+    setMobileSheetExpanded(true);
   }, [selectedModel]);
 
   // Copy prompt
@@ -279,7 +401,7 @@ export default function ProjectWorkspace() {
 
     // Check if model requires image input
     const currentModelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel);
-    if (currentModelInfo?.requiresImageInput && !inputImage) {
+    if (currentModelInfo?.requiresImageInput && inputImages.length === 0) {
       setError(`${currentModelInfo.label} requires an input image. Please add an image or switch to a different model.`);
       return;
     }
@@ -290,7 +412,7 @@ export default function ProjectWorkspace() {
     
     // Capture current values for this generation
     const currentPrompt = prompt;
-    const currentInputImage = inputImage;
+    const currentInputImages = [...inputImages];
     const currentAspectRatio = aspectRatio;
     const currentResolution = resolution;
     const currentOutputFormat = outputFormat;
@@ -301,7 +423,7 @@ export default function ProjectWorkspace() {
     const newGeneration: GenerationItem = {
       id,
       type: "generation",
-      inputImage: currentInputImage || undefined,
+      inputImage: currentInputImages[0] || undefined,
       prompt: currentPrompt,
       timestamp: new Date(),
       loading: true,
@@ -326,15 +448,15 @@ export default function ProjectWorkspace() {
         };
 
         if (currentModel === "nano-banana-pro") {
-          requestBody.imageInputs = currentInputImage ? [currentInputImage] : [];
+          requestBody.imageInputs = currentInputImages;
           requestBody.aspectRatio = currentAspectRatio;
           requestBody.resolution = currentResolution;
         } else if (currentModel === "google-nano-banana") {
-          requestBody.imageInputs = currentInputImage ? [currentInputImage] : [];
+          requestBody.imageInputs = currentInputImages;
           requestBody.aspectRatio = currentAspectRatio;
         } else if (currentModel === "seedream-edit") {
           // Seedream Edit uses imageSize presets and requires image inputs
-          requestBody.imageInputs = currentInputImage ? [currentInputImage] : [];
+          requestBody.imageInputs = currentInputImages;
           requestBody.imageSize = currentImageSize;
         } else if (currentModel === "seedream") {
           // Seedream text-to-image uses imageSize, no image inputs
@@ -387,6 +509,10 @@ export default function ProjectWorkspace() {
         
         // Mark as loaded immediately so we don't show spinner for fresh generations
         setLoadedImages(prev => new Set(prev).add(savedId));
+        
+        // Auto-set generated image as input for next iteration
+        setInputImages([data.imageUrl]);
+        setSelectedImageIndex(0);
       } catch (err) {
         setGenerations(prev =>
           prev.map(g =>
@@ -397,7 +523,7 @@ export default function ProjectWorkspace() {
         );
       }
     })();
-  }, [prompt, inputImage, aspectRatio, resolution, outputFormat, imageSize, selectedModel, currentProject]);
+  }, [prompt, inputImages, aspectRatio, resolution, outputFormat, imageSize, selectedModel, currentProject]);
 
   // Delete generation
   const handleDeleteGeneration = useCallback(async (id: string) => {
@@ -415,7 +541,8 @@ export default function ProjectWorkspace() {
     setGenerations(prev => prev.filter(g => g.id !== gen.id));
     
     // Set up the form with the same settings
-    setInputImage(gen.inputImage || null);
+    setInputImages(gen.inputImage ? [gen.inputImage] : []);
+    setSelectedImageIndex(0);
     setPrompt(gen.prompt);
     if (gen.aspectRatio) setAspectRatio(gen.aspectRatio as AspectRatio);
     if (gen.settings) {
@@ -512,12 +639,12 @@ export default function ProjectWorkspace() {
             <label
               className={cn(
                 "p-3 rounded-xl cursor-pointer transition-all border-2 border-dashed",
-                inputImage ? "bg-lime-400/10 border-lime-400/30" : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/50"
+                inputImages.length > 0 ? "bg-lime-400/10 border-lime-400/30" : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/50"
               )}
               title="Upload image"
             >
-              <Upload className={cn("w-5 h-5", inputImage ? "text-lime-400" : "text-zinc-500")} />
-              <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+              <Upload className={cn("w-5 h-5", inputImages.length > 0 ? "text-lime-400" : "text-zinc-500")} />
+              <input type="file" accept="image/*" multiple={true} onChange={handleFileSelect} className="hidden" />
             </label>
             
             <button
@@ -544,10 +671,12 @@ export default function ProjectWorkspace() {
 
         {/* Expanded view */}
         <div className={cn("flex-1 flex flex-col overflow-hidden", sidebarCollapsed && "hidden")}>
-          {/* Input Image */}
+          {/* Input Images - Multi-image support */}
           <div className="p-4 border-b border-white/5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-zinc-300">Input Image</span>
+              <span className="text-sm font-medium text-zinc-300">
+                Input Images {inputImages.length > 0 && <span className="text-zinc-500">({inputImages.length})</span>}
+              </span>
               {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput ? (
                 <span className="text-xs text-amber-400 font-medium">required</span>
               ) : MODEL_OPTIONS.find(m => m.value === selectedModel)?.supportsImageInput ? (
@@ -556,18 +685,59 @@ export default function ProjectWorkspace() {
                 <span className="text-xs text-zinc-600">not used</span>
               )}
             </div>
-            {inputImage ? (
-              <div className="relative group">
-                <img src={inputImage} alt="Input" className="w-full aspect-video object-cover rounded-xl border border-zinc-800" />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center gap-2">
-                  <label className="p-2 bg-white/10 hover:bg-white/20 rounded-lg cursor-pointer transition-colors">
-                    <RotateCcw className="w-4 h-4" />
-                    <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
-                  </label>
-                  <button onClick={() => setInputImage(null)} className="p-2 bg-white/10 hover:bg-red-500/50 rounded-lg transition-colors">
-                    <X className="w-4 h-4" />
-                  </button>
+            {inputImages.length > 0 ? (
+              <div className="space-y-3">
+                {/* Main selected image */}
+                <div className="relative group">
+                  <img src={inputImages[selectedImageIndex] || inputImages[0]} alt="Input" className="w-full aspect-video object-cover rounded-xl border border-zinc-800" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center gap-2">
+                    <label className="p-2 bg-white/10 hover:bg-white/20 rounded-lg cursor-pointer transition-colors" title="Add more images">
+                      <Plus className="w-4 h-4" />
+                      <input type="file" accept="image/*" multiple={true} onChange={handleFileSelect} className="hidden" />
+                    </label>
+                    <button 
+                      onClick={() => {
+                        setInputImages(prev => prev.filter((_, i) => i !== selectedImageIndex));
+                        setSelectedImageIndex(Math.max(0, selectedImageIndex - 1));
+                      }} 
+                      className="p-2 bg-white/10 hover:bg-red-500/50 rounded-lg transition-colors"
+                      title="Remove this image"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => { setInputImages([]); setSelectedImageIndex(0); }} 
+                      className="p-2 bg-white/10 hover:bg-red-500/50 rounded-lg transition-colors"
+                      title="Clear all images"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
+                {/* Thumbnails for current input images */}
+                {inputImages.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {inputImages.map((img, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedImageIndex(i)}
+                        className={cn(
+                          "relative flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 transition-all",
+                          i === selectedImageIndex 
+                            ? "border-lime-500 ring-2 ring-lime-500/30" 
+                            : "border-zinc-700 opacity-70 hover:opacity-100 hover:border-zinc-500"
+                        )}
+                      >
+                        <img src={img} alt={`Input ${i + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                    {/* Add more button in thumbnails */}
+                    <label className="flex-shrink-0 w-12 h-12 border-2 border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg flex items-center justify-center cursor-pointer transition-colors">
+                      <Plus className="w-4 h-4 text-zinc-500" />
+                      <input type="file" accept="image/*" multiple={true} onChange={handleFileSelect} className="hidden" />
+                    </label>
+                  </div>
+                )}
               </div>
             ) : (
               <label
@@ -580,9 +750,69 @@ export default function ProjectWorkspace() {
                 <div className="w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center">
                   <Upload className="w-5 h-5 text-zinc-500" />
                 </div>
-                <p className="text-sm text-zinc-400">Drop image or click</p>
-                <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+                <p className="text-sm text-zinc-400">Drop images or click • Multiple supported</p>
+                <input type="file" accept="image/*" multiple={true} onChange={handleFileSelect} className="hidden" />
               </label>
+            )}
+            
+            {/* Available Images - Original uploads + Generated outputs */}
+            {(originalUploads.length > 0 || generations.filter(g => g.outputImage).length > 0) && (
+              <div className="mt-4 pt-3 border-t border-zinc-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-zinc-400">Select from history</span>
+                  <span className="text-[10px] text-zinc-600">click to add</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {/* Original uploads */}
+                  {originalUploads.map((img, i) => (
+                    <button
+                      key={`upload-${i}`}
+                      onClick={() => {
+                        if (!inputImages.includes(img)) {
+                          setInputImages(prev => [...prev, img]);
+                        }
+                      }}
+                      className={cn(
+                        "relative w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
+                        inputImages.includes(img)
+                          ? "border-lime-500/50 opacity-50 cursor-default"
+                          : "border-zinc-700 hover:border-violet-500 hover:scale-105"
+                      )}
+                      title={inputImages.includes(img) ? "Already selected" : "Add to input"}
+                      disabled={inputImages.includes(img)}
+                    >
+                      <img src={img} alt={`Upload ${i + 1}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                        <Upload className="w-3 h-3 text-violet-300" />
+                      </div>
+                    </button>
+                  ))}
+                  {/* Generated outputs */}
+                  {generations.filter(g => g.outputImage).map((gen) => (
+                    <button
+                      key={`gen-${gen.id}`}
+                      onClick={() => {
+                        if (gen.outputImage && !inputImages.includes(gen.outputImage)) {
+                          setInputImages(prev => [...prev, gen.outputImage!]);
+                        }
+                      }}
+                      className={cn(
+                        "relative w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
+                        inputImages.includes(gen.outputImage!)
+                          ? "border-lime-500/50 opacity-50 cursor-default"
+                          : "border-zinc-700 hover:border-lime-500 hover:scale-105"
+                      )}
+                      title={inputImages.includes(gen.outputImage!) ? "Already selected" : "Add generated image to input"}
+                      disabled={inputImages.includes(gen.outputImage!)}
+                    >
+                      <img src={gen.outputImage} alt="Generated" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-lime-500/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                        <Sparkles className="w-3 h-3 text-lime-300" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -600,7 +830,7 @@ export default function ProjectWorkspace() {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && prompt.trim()) { e.preventDefault(); generate(); } }}
-                placeholder={inputImage ? "Describe how to edit this image..." : "Describe the image you want to create..."}
+                placeholder={inputImages.length > 0 ? "Describe how to edit this image..." : "Describe the image you want to create..."}
                 className="w-full h-28 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-lime-500/50 resize-none"
               />
             </div>
@@ -748,7 +978,7 @@ export default function ProjectWorkspace() {
               </div>
             )}
             {/* Warning if model requires image but none provided */}
-            {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage && (
+            {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0 && (
               <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                 <Upload className="w-4 h-4 text-amber-400" />
                 <span className="text-xs text-amber-400">Add an image to use {MODEL_OPTIONS.find(m => m.value === selectedModel)?.label}</span>
@@ -756,10 +986,10 @@ export default function ProjectWorkspace() {
             )}
             <button
               onClick={generate}
-              disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)}
+              disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0)}
               className={cn(
                 "w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all", 
-                !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)
+                !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0)
                   ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" 
                   : "bg-lime-400 text-black hover:bg-lime-300 shadow-lg shadow-lime-400/20"
               )}
@@ -774,14 +1004,14 @@ export default function ProjectWorkspace() {
           <div className="p-3 border-t border-white/5">
             <button 
               onClick={generate} 
-              disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)}
+              disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0)}
               className={cn(
                 "w-full p-3 rounded-xl transition-all flex items-center justify-center", 
-                !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)
+                !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0)
                   ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" 
                   : "bg-lime-400 text-black hover:bg-lime-300 shadow-lg shadow-lime-400/20"
               )}
-              title={MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage ? "Add an image first" : "Generate"}
+              title={MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0 ? "Add an image first" : "Generate"}
             ><Sparkles className="w-5 h-5" /></button>
           </div>
         )}
@@ -849,14 +1079,36 @@ export default function ProjectWorkspace() {
             <div className="space-y-6 mx-auto w-full">
               {generations.map((gen) => (
                 <div key={gen.id} className="group bg-zinc-900/30 border border-zinc-800/50 rounded-2xl overflow-hidden">
-                  {/* Prompt bar - compact */}
+                  {/* Header bar */}
                   <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-zinc-800/30">
-                    <p className="text-sm text-zinc-300 flex-1 line-clamp-1">{gen.prompt}</p>
+                    {gen.type === "upload" ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs font-medium rounded-md flex items-center gap-1">
+                          <Upload className="w-3 h-3" />
+                          Upload
+                        </span>
+                        <span className="text-sm text-zinc-400">Reference image</span>
+                      </div>
+                    ) : gen.type === "annotated" ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs font-medium rounded-md flex items-center gap-1">
+                          <Pencil className="w-3 h-3" />
+                          Annotated
+                        </span>
+                        <span className="text-sm text-zinc-400">Marked up for generation</span>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-zinc-300 flex-1 line-clamp-1">{gen.prompt}</p>
+                    )}
                     <div className="flex items-center gap-1">
-                      <span className="text-xs text-zinc-600">{gen.aspectRatio || "auto"}</span>
-                      <button onClick={() => copyPrompt(gen.prompt, gen.id)} className="p-1.5 text-zinc-600 hover:text-white transition-colors flex-shrink-0">
-                        {copiedId === gen.id ? <Check className="w-4 h-4 text-lime-400" /> : <Copy className="w-4 h-4" />}
-                      </button>
+                      {gen.type === "generation" && (
+                        <>
+                          <span className="text-xs text-zinc-600">{gen.aspectRatio || "auto"}</span>
+                          <button onClick={() => copyPrompt(gen.prompt, gen.id)} className="p-1.5 text-zinc-600 hover:text-white transition-colors flex-shrink-0">
+                            {copiedId === gen.id ? <Check className="w-4 h-4 text-lime-400" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   
@@ -889,26 +1141,25 @@ export default function ProjectWorkspace() {
                         />
                       </div>
                     ) : gen.outputImage ? (
-                      <div className="relative w-full flex items-center justify-center">
-                        {/* Clean skeleton loading state */}
+                      <div className="relative w-full flex items-center justify-center min-h-[200px]">
+                        {/* Loading overlay */}
                         {!loadedImages.has(gen.id) && (
-                          <div className="w-full aspect-[4/3] max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-200px)] skeleton-loader flex items-center justify-center">
-                            <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center animate-[breathe_2s_ease-in-out_infinite]">
-                              <ImageIcon className="w-5 h-5 text-zinc-600" />
+                          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 rounded-lg z-10">
+                            <div className="flex flex-col items-center gap-2">
+                              <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
+                              <span className="text-xs text-zinc-600">Loading...</span>
                             </div>
                           </div>
                         )}
                         <img 
                           src={gen.outputImage} 
                           alt={gen.prompt} 
-                          className={cn(
-                            "max-w-full max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-200px)] w-auto h-auto object-contain cursor-pointer transition-opacity duration-300",
-                            loadedImages.has(gen.id) ? "opacity-100" : "opacity-0 absolute"
-                          )} 
+                          className="max-w-full max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-200px)] w-auto h-auto object-contain cursor-pointer"
                           onClick={() => setFullView(gen)}
                           loading="eager"
-                          decoding="async"
+                          decoding="sync"
                           onLoad={() => handleImageLoaded(gen.id)}
+                          onError={() => handleImageLoaded(gen.id)}
                         />
                       </div>
                     ) : null}
@@ -919,11 +1170,34 @@ export default function ProjectWorkspace() {
                     <div className="px-4 py-3 flex items-center gap-2 border-t border-zinc-800/30">
                       <button
                         onClick={() => { useAsInput(gen.outputImage!); setMobileSheetExpanded(true); }}
-                        className="flex-1 py-2.5 bg-lime-400/10 hover:bg-lime-400/20 text-lime-400 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors border border-lime-400/20"
+                        className={cn(
+                          "flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors border",
+                          gen.type === "upload" 
+                            ? "bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border-violet-500/20"
+                            : gen.type === "annotated"
+                            ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20"
+                            : "bg-lime-400/10 hover:bg-lime-400/20 text-lime-400 border-lime-400/20"
+                        )}
                       >
-                        <ArrowRight className="w-4 h-4" />
-                        Edit this
+                        {gen.type === "upload" || gen.type === "annotated" ? (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            Generate from this
+                          </>
+                        ) : (
+                          <>
+                            <ArrowRight className="w-4 h-4" />
+                            Edit this
+                          </>
+                        )}
                       </button>
+                      <AnnotateButton
+                        imageUrl={gen.outputImage}
+                        onAnnotated={handleAnnotatedImage}
+                        className="p-2.5 bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 rounded-xl transition-colors border border-violet-500/20"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </AnnotateButton>
                       <a href={gen.outputImage} download={`banana-${gen.id}.png`} target="_blank" rel="noopener noreferrer"
                         className="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors" title="Download">
                         <Download className="w-4 h-4" />
@@ -963,21 +1237,33 @@ export default function ProjectWorkspace() {
             <div className="w-10 h-1 bg-zinc-700 rounded-full" />
           </button>
 
-          {/* Collapsed: Compact Input Bar */}
+          {/* Collapsed: Compact Input Bar - Draggable to expand */}
           {!mobileSheetExpanded && (
-            <div className="px-4 pb-4">
+            <div 
+              className="px-4 pb-4"
+              onTouchStart={handleSheetTouchStart}
+              onTouchMove={handleSheetTouchMove}
+              onTouchEnd={handleSheetTouchEnd}
+            >
               <div className="flex items-center gap-2">
                 {/* Image indicator/button */}
                 <label className={cn(
-                  "flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all cursor-pointer overflow-hidden",
-                  inputImage ? "border border-lime-400/30" : "bg-zinc-800 border border-zinc-700"
+                  "relative flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all cursor-pointer overflow-hidden",
+                  inputImages.length > 0 ? "border border-lime-400/30" : "bg-zinc-800 border border-zinc-700"
                 )}>
-                  {inputImage ? (
-                    <img src={inputImage} alt="" className="w-full h-full object-cover" />
+                  {inputImages.length > 0 ? (
+                    <>
+                      <img src={inputImages[0]} alt="" className="w-full h-full object-cover" />
+                      {inputImages.length > 1 && (
+                        <span className="absolute -top-1 -right-1 bg-lime-500 text-black text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                          {inputImages.length}
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <ImageLucide className="w-4 h-4 text-zinc-500" />
                   )}
-                  <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+                  <input type="file" accept="image/*" multiple={true} onChange={handleFileSelect} className="hidden" />
                 </label>
                 
                 {/* Prompt input */}
@@ -985,8 +1271,7 @@ export default function ProjectWorkspace() {
                   type="text"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  onFocus={() => setMobileSheetExpanded(true)}
-                  placeholder={inputImage ? "Describe the edit..." : "Describe your image..."}
+                  placeholder={inputImages.length > 0 ? "Describe the edit..." : "Describe your image..."}
                   className="flex-1 h-10 bg-zinc-800 border border-zinc-700 rounded-lg px-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-500/50"
                 />
                 
@@ -1022,15 +1307,22 @@ export default function ProjectWorkspace() {
                 <div className="flex gap-3">
                   {/* Image thumbnail/upload */}
                   <label className={cn(
-                    "flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center cursor-pointer transition-all overflow-hidden",
-                    inputImage ? "border-2 border-lime-400/30" : "bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-zinc-600"
+                    "relative flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center cursor-pointer transition-all overflow-hidden",
+                    inputImages.length > 0 ? "border-2 border-lime-400/30" : "bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-zinc-600"
                   )}>
-                    {inputImage ? (
-                      <img src={inputImage} alt="" className="w-full h-full object-cover" />
+                    {inputImages.length > 0 ? (
+                      <>
+                        <img src={inputImages[selectedImageIndex] || inputImages[0]} alt="" className="w-full h-full object-cover" />
+                        {inputImages.length > 1 && (
+                          <span className="absolute -top-1 -right-1 bg-lime-500 text-black text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                            {inputImages.length}
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <Upload className="w-5 h-5 text-zinc-500" />
                     )}
-                    <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+                    <input type="file" accept="image/*" multiple={true} onChange={handleFileSelect} className="hidden" />
                   </label>
 
                   {/* Prompt textarea */}
@@ -1038,7 +1330,7 @@ export default function ProjectWorkspace() {
                     <textarea
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder={inputImage ? "Describe the edit..." : "Describe your image..."}
+                      placeholder={inputImages.length > 0 ? "Describe the edit..." : "Describe your image..."}
                       className="w-full h-16 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-500/50 resize-none"
                     />
                     <button 
@@ -1050,14 +1342,107 @@ export default function ProjectWorkspace() {
                   </div>
                 </div>
 
-                {/* Remove image button */}
-                {inputImage && (
+                {/* Image thumbnails for multi-image */}
+                {inputImages.length > 1 && (
+                  <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+                    {inputImages.map((img, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedImageIndex(i)}
+                        className={cn(
+                          "relative flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
+                          i === selectedImageIndex 
+                            ? "border-lime-500" 
+                            : "border-zinc-700 opacity-70"
+                        )}
+                      >
+                        <img src={img} alt={`Input ${i + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInputImages(prev => prev.filter((_, idx) => idx !== i));
+                            if (selectedImageIndex >= inputImages.length - 1) {
+                              setSelectedImageIndex(Math.max(0, inputImages.length - 2));
+                            }
+                          }}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center"
+                        >
+                          <X className="w-2.5 h-2.5 text-white" />
+                        </button>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Remove all images button */}
+                {inputImages.length > 0 && (
                   <button 
-                    onClick={() => setInputImage(null)} 
+                    onClick={() => { setInputImages([]); setSelectedImageIndex(0); }} 
                     className="mt-2 text-xs text-zinc-500 hover:text-red-400 flex items-center gap-1"
                   >
-                    <X className="w-3 h-3" /> Remove image
+                    <X className="w-3 h-3" /> Clear all images
                   </button>
+                )}
+                
+                {/* Select from history - mobile */}
+                {(originalUploads.length > 0 || generations.filter(g => g.outputImage).length > 0) && (
+                  <div className="mt-3 pt-3 border-t border-zinc-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-zinc-400">Select from history</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {/* Original uploads */}
+                      {originalUploads.map((img, i) => (
+                        <button
+                          key={`upload-${i}`}
+                          onClick={() => {
+                            if (!inputImages.includes(img)) {
+                              setInputImages(prev => [...prev, img]);
+                            }
+                          }}
+                          className={cn(
+                            "relative w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
+                            inputImages.includes(img)
+                              ? "border-lime-500/50 opacity-50"
+                              : "border-zinc-700 active:scale-95"
+                          )}
+                          disabled={inputImages.includes(img)}
+                        >
+                          <img src={img} alt={`Upload ${i + 1}`} className="w-full h-full object-cover" />
+                          {!inputImages.includes(img) && (
+                            <div className="absolute inset-0 bg-violet-500/30 flex items-center justify-center">
+                              <Upload className="w-3 h-3 text-violet-200" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                      {/* Generated outputs */}
+                      {generations.filter(g => g.outputImage).map((gen) => (
+                        <button
+                          key={`gen-${gen.id}`}
+                          onClick={() => {
+                            if (gen.outputImage && !inputImages.includes(gen.outputImage)) {
+                              setInputImages(prev => [...prev, gen.outputImage!]);
+                            }
+                          }}
+                          className={cn(
+                            "relative w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
+                            inputImages.includes(gen.outputImage!)
+                              ? "border-lime-500/50 opacity-50"
+                              : "border-zinc-700 active:scale-95"
+                          )}
+                          disabled={inputImages.includes(gen.outputImage!)}
+                        >
+                          <img src={gen.outputImage} alt="Generated" className="w-full h-full object-cover" />
+                          {!inputImages.includes(gen.outputImage!) && (
+                            <div className="absolute inset-0 bg-lime-500/30 flex items-center justify-center">
+                              <Sparkles className="w-3 h-3 text-lime-200" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -1189,7 +1574,7 @@ export default function ProjectWorkspace() {
               )}
 
               {/* Warning if model requires image but none provided */}
-              {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage && (
+              {MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0 && (
                 <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                   <Upload className="w-4 h-4 text-amber-400" />
                   <span className="text-xs text-amber-400">Add an image to use this model</span>
@@ -1199,10 +1584,10 @@ export default function ProjectWorkspace() {
               {/* Generate Button */}
               <button
                 onClick={() => { generate(); setMobileSheetExpanded(false); }}
-                disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)}
+                disabled={!prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0)}
                 className={cn(
                   "w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all",
-                  !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && !inputImage)
+                  !prompt.trim() || (MODEL_OPTIONS.find(m => m.value === selectedModel)?.requiresImageInput && inputImages.length === 0)
                     ? "bg-zinc-800 text-zinc-500" 
                     : "bg-lime-400 text-black active:scale-[0.98]"
                 )}
@@ -1265,6 +1650,19 @@ export default function ProjectWorkspace() {
               <ArrowRight className="w-4 h-4" />
               Edit this
             </button>
+            {fullView.outputImage && (
+              <AnnotateButton
+                imageUrl={fullView.outputImage}
+                onAnnotated={(annotatedUrl) => {
+                  handleAnnotatedImage(annotatedUrl);
+                  setFullView(null);
+                }}
+                className="flex-1 lg:flex-initial flex items-center justify-center gap-2 px-4 py-3 lg:py-2.5 bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 rounded-xl font-medium transition-colors text-sm max-w-xs border border-violet-500/20"
+              >
+                <Pencil className="w-4 h-4" />
+                Annotate
+              </AnnotateButton>
+            )}
             <a
               href={fullView.outputImage}
               download

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
@@ -8,8 +9,6 @@ import {
   X,
   ChevronDown,
   ChevronRight,
-  PanelRightClose,
-  PanelRight,
   Home,
   Palette,
   Layers,
@@ -21,15 +20,10 @@ import {
   Grid3X3,
   Paintbrush,
   Blinds,
-  FileJson,
-  Copy,
-  Check,
   Trash2,
-  Tag,
   Loader2,
   AlertCircle,
   Upload,
-  ImageIcon,
   Plus,
   FolderOpen,
   DoorClosed,
@@ -37,11 +31,13 @@ import {
   Building2,
   Wand2,
   Image as ImageLucide,
+  Pencil,
 } from "lucide-react";
 import { ChangeEvent, DragEvent } from "react";
 import { Project, Room, RoomDesign } from "@/lib/database.types";
 import { Comparison } from "@/components/ui/comparison";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { AnnotateButton } from "@/components/image-annotator";
 
 // Model types for image generation
 type ModelType = "nano-banana-pro" | "seedream-edit" | "google-nano-banana";
@@ -648,11 +644,39 @@ function countDesignItems(design: DesignJSON): number {
 }
 
 export default function DesignerPage() {
+  // URL state management
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
   // Project & Room state
   const [projects, setProjects] = useState<Project[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<(Room & { latest_design?: RoomDesign | null }) | null>(null);
+  
+  // Update URL when project/room selection changes
+  const updateURL = useCallback((projectId: string | null, roomId: string | null) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set("project", projectId);
+    if (roomId) params.set("room", roomId);
+    const newUrl = params.toString() ? `?${params.toString()}` : "/designer";
+    router.replace(newUrl, { scroll: false });
+  }, [router]);
+  
+  // Wrapper to select project and update URL
+  const selectProject = useCallback((project: Project | null) => {
+    setSelectedProject(project);
+    setSelectedRoom(null);
+    updateURL(project?.id || null, null);
+  }, [updateURL]);
+  
+  // Wrapper to select room and update URL
+  const selectRoom = useCallback((room: (Room & { latest_design?: RoomDesign | null }) | null) => {
+    setSelectedRoom(room);
+    if (selectedProject) {
+      updateURL(selectedProject.id, room?.id || null);
+    }
+  }, [selectedProject, updateURL]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -664,8 +688,6 @@ export default function DesignerPage() {
 
   // Design JSON state
   const [designJSON, setDesignJSON] = useState<DesignJSON>(emptyDesignJSON);
-  const [jsonInput, setJsonInput] = useState("");
-  const [parseError, setParseError] = useState<string | null>(null);
 
   // Prompt state
   const [prompt, setPrompt] = useState("");
@@ -674,27 +696,21 @@ export default function DesignerPage() {
 
   // Image upload state
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [originalUploads, setOriginalUploads] = useState<string[]>([]); // Track original uploads for iteration
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0); // Which image to show in comparison
 
-  // UI state - sidebar starts collapsed on mobile
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["shell", "interior"])
-  );
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set()
-  );
-  const [showJsonInput, setShowJsonInput] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // UI state
   const [showModelSelector, setShowModelSelector] = useState(false);
 
   // Image rendering state
   const [selectedModel, setSelectedModel] = useState<ModelType>("nano-banana-pro");
   const [renderedImage, setRenderedImage] = useState<string | null>(null);
+  const [beforeImage, setBeforeImage] = useState<string | null>(null); // Track the "before" image for comparison
   const [isRenderingImage, setIsRenderingImage] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
 
-  // Fetch projects on mount and check for pre-selected project
+  // Fetch projects on mount and restore from URL params
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -703,12 +719,24 @@ export default function DesignerPage() {
           const data = await response.json();
           setProjects(data);
           
-          // Check for pre-selected project from home page
+          // Check URL params first for project selection
+          const urlProjectId = searchParams.get("project");
+          if (urlProjectId) {
+            const urlProject = data.find((p: Project) => p.id === urlProjectId);
+            if (urlProject) {
+              setSelectedProject(urlProject);
+              return; // Don't check localStorage if URL has project
+            }
+          }
+          
+          // Fallback: Check for pre-selected project from home page (localStorage)
           const preSelectedId = localStorage.getItem("banana_designer_project_id");
           if (preSelectedId) {
             const preSelectedProject = data.find((p: Project) => p.id === preSelectedId);
             if (preSelectedProject) {
               setSelectedProject(preSelectedProject);
+              // Update URL to reflect this selection
+              updateURL(preSelectedId, null);
             }
             // Clear the stored ID after using it
             localStorage.removeItem("banana_designer_project_id");
@@ -721,9 +749,10 @@ export default function DesignerPage() {
       }
     };
     fetchProjects();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
-  // Fetch rooms when project changes
+  // Fetch rooms when project changes and restore room from URL
   useEffect(() => {
     if (!selectedProject) {
       setRooms([]);
@@ -738,6 +767,15 @@ export default function DesignerPage() {
         if (response.ok) {
           const data = await response.json();
           setRooms(data);
+          
+          // Check URL params for room selection
+          const urlRoomId = searchParams.get("room");
+          if (urlRoomId) {
+            const urlRoom = data.find((r: Room) => r.id === urlRoomId);
+            if (urlRoom) {
+              setSelectedRoom(urlRoom);
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching rooms:", error);
@@ -746,15 +784,16 @@ export default function DesignerPage() {
       }
     };
     fetchRooms();
-  }, [selectedProject]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject?.id]); // Only re-run when project ID changes
 
   // Load design when room changes
   useEffect(() => {
     if (!selectedRoom) {
       setDesignJSON(emptyDesignJSON);
-      setExpandedCategories(new Set());
       setUploadedImages([]);
-      setRenderedImage(null);
+      setSelectedImageIndex(0);
+      setRenderedImage(null); setBeforeImage(null);
       return;
     }
 
@@ -766,38 +805,22 @@ export default function DesignerPage() {
           if (data.latest_design?.design_json) {
             const design = data.latest_design.design_json as DesignJSON;
             setDesignJSON(design);
-            // Auto-expand categories with content
-            const newExpanded = new Set<string>();
-            if (design.shell) {
-              Object.entries(design.shell).forEach(([key, cat]) => {
-                if (cat.materials_overall.length > 0 || cat.items.length > 0) {
-                  newExpanded.add(key);
-                }
-              });
-            }
-            if (design.interior) {
-              Object.entries(design.interior).forEach(([key, cat]) => {
-                if (cat.materials_overall.length > 0 || cat.items.length > 0) {
-                  newExpanded.add(key);
-                }
-              });
-            }
-            setExpandedCategories(newExpanded);
           } else {
             setDesignJSON(emptyDesignJSON);
-            setExpandedCategories(new Set());
           }
           
           // Load saved images
           if (data.latest_design?.before_image_url) {
             setUploadedImages([data.latest_design.before_image_url]);
+            setSelectedImageIndex(0);
           } else {
             setUploadedImages([]);
+            setSelectedImageIndex(0);
           }
           if (data.latest_design?.rendered_image_url) {
             setRenderedImage(data.latest_design.rendered_image_url);
           } else {
-            setRenderedImage(null);
+            setRenderedImage(null); setBeforeImage(null);
           }
           
           setHasUnsavedChanges(false);
@@ -833,14 +856,14 @@ export default function DesignerPage() {
       if (response.ok) {
         const newRoom = await response.json();
         setRooms((prev) => [newRoom, ...prev]);
-        setSelectedRoom(newRoom);
+        selectRoom(newRoom);
         setNewRoomName("");
         setShowNewRoomInput(false);
       }
     } catch (error) {
       console.error("Error creating room:", error);
     }
-  }, [selectedProject, newRoomName]);
+  }, [selectedProject, newRoomName, selectRoom]);
 
   // Delete room (can delete roomToDelete or selectedRoom)
   const deleteRoom = useCallback(async () => {
@@ -856,10 +879,11 @@ export default function DesignerPage() {
         setRooms((prev) => prev.filter((r) => r.id !== targetRoom.id));
         // If we deleted the currently selected room, clear the selection
         if (selectedRoom?.id === targetRoom.id) {
-          setSelectedRoom(null);
+          selectRoom(null);
           setDesignJSON(emptyDesignJSON);
           setUploadedImages([]);
-          setRenderedImage(null);
+          setSelectedImageIndex(0);
+          setRenderedImage(null); setBeforeImage(null);
         }
         setRoomToDelete(null);
       }
@@ -955,6 +979,10 @@ export default function DesignerPage() {
       return;
     }
 
+    // Capture the "before" image for comparison BEFORE rendering
+    const currentBeforeImage = uploadedImages[selectedImageIndex] || uploadedImages[0];
+    setBeforeImage(currentBeforeImage);
+    
     setIsRenderingImage(true);
     setRenderError(null);
 
@@ -970,7 +998,7 @@ export default function DesignerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: imagePrompt,
-          imageInputs: [uploadedImages[0]], // Use first uploaded image
+          imageInputs: uploadedImages, // Send ALL uploaded images as context
           model: selectedModel,
           aspectRatio,
           outputFormat: "png",
@@ -986,6 +1014,10 @@ export default function DesignerPage() {
 
       if (data.imageUrl) {
         setRenderedImage(data.imageUrl);
+        
+        // Auto-set rendered image as input for next iteration (but beforeImage stays for comparison)
+        setUploadedImages([data.imageUrl]);
+        setSelectedImageIndex(0);
         
         // Auto-save the rendered image and design JSON to the room
         if (selectedRoom) {
@@ -1017,32 +1049,6 @@ export default function DesignerPage() {
   const renderDesignImage = useCallback(async () => {
     await renderDesignImageWithDesign(designJSON);
   }, [designJSON, renderDesignImageWithDesign]);
-
-  // Toggle section expansion
-  const toggleSection = (section: string) => {
-    setExpandedSections((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(section)) {
-        newSet.delete(section);
-      } else {
-        newSet.add(section);
-      }
-      return newSet;
-    });
-  };
-
-  // Toggle category expansion
-  const toggleCategory = (category: string) => {
-    setExpandedCategories((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(category)) {
-        newSet.delete(category);
-      } else {
-        newSet.add(category);
-      }
-      return newSet;
-    });
-  };
 
   // Update style tags in meta
   const updateStyleTags = useCallback((newTags: string[]) => {
@@ -1204,58 +1210,9 @@ export default function DesignerPage() {
           [section]: newSectionData,
         };
       });
-      
-      // Update expanded categories if needed
-      setExpandedCategories((prev) => {
-        if (prev.has(oldName)) {
-          const newSet = new Set(prev);
-          newSet.delete(oldName);
-          newSet.add(newName);
-          return newSet;
-        }
-        return prev;
-      });
     },
     []
   );
-
-  // Auto-expand categories with content
-  const autoExpandCategories = useCallback((design: DesignJSON) => {
-    const newExpanded = new Set<string>();
-    
-    if (design.shell) {
-      Object.entries(design.shell).forEach(([key, value]) => {
-        const cat = value as DesignCategory;
-        if (cat.materials_overall?.length > 0 || cat.items?.length > 0) {
-          newExpanded.add(key);
-        }
-      });
-    }
-    if (design.interior) {
-      Object.entries(design.interior).forEach(([key, value]) => {
-        const cat = value as DesignCategory;
-        if (cat.materials_overall?.length > 0 || cat.items?.length > 0) {
-          newExpanded.add(key);
-        }
-      });
-    }
-    
-    setExpandedCategories(newExpanded);
-    setExpandedSections(new Set(["shell", "interior"]));
-  }, []);
-
-  // Parse JSON input
-  const parseJSON = useCallback(() => {
-    try {
-      const parsed = JSON.parse(jsonInput);
-      setDesignJSON(parsed);
-      setParseError(null);
-      setShowJsonInput(false);
-      autoExpandCategories(parsed);
-    } catch {
-      setParseError("Invalid JSON format");
-    }
-  }, [jsonInput, autoExpandCategories]);
 
   // Compress image to reduce payload size for Vercel
   const compressImage = useCallback((file: File, maxDimension: number = 1024, quality: number = 0.8): Promise<string> => {
@@ -1299,51 +1256,69 @@ export default function DesignerPage() {
   }, []);
 
   // Image handling
-  const processFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      setGenerationError("Please select an image file");
-      return;
-    }
-
-    // Check file size (max 20MB for OpenAI)
-    if (file.size > 20 * 1024 * 1024) {
-      setGenerationError("Image must be less than 20MB");
-      return;
-    }
-
-    try {
-      // Compress image aggressively (Vercel has ~4.5MB limit for entire request)
-      // 768px max dimension + 70% quality keeps base64 around 100-300KB
-      const compressedDataUrl = await compressImage(file, 768, 0.7);
-      setUploadedImages((prev) => [...prev, compressedDataUrl]);
-      setGenerationError(null);
-    } catch (error) {
-      console.error("Error compressing image:", error);
-      setGenerationError("Failed to process image");
-    }
-  }, [compressImage]);
-
   const handleFileSelect = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
+    async (e: ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (files) {
-        Array.from(files).forEach((file) => processFile(file));
+        // Process all files and collect results
+        const fileArray = Array.from(files);
+        const compressedImages: string[] = [];
+        
+        for (const file of fileArray) {
+          if (!file.type.startsWith("image/")) continue;
+          if (file.size > 20 * 1024 * 1024) continue;
+          
+          try {
+            const compressedDataUrl = await compressImage(file, 768, 0.7);
+            compressedImages.push(compressedDataUrl);
+          } catch (error) {
+            console.error("Error compressing image:", error);
+          }
+        }
+        
+        // Add all images at once to avoid race conditions
+        if (compressedImages.length > 0) {
+          setUploadedImages((prev) => [...prev, ...compressedImages]);
+          setOriginalUploads((prev) => [...prev, ...compressedImages]); // Track original uploads
+          setGenerationError(null);
+        }
       }
       e.target.value = "";
     },
-    [processFile]
+    [compressImage]
   );
 
   const handleDrop = useCallback(
-    (e: DragEvent) => {
+    async (e: DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
       const files = e.dataTransfer?.files;
       if (files) {
-        Array.from(files).forEach((file) => processFile(file));
+        // Process all files and collect results
+        const fileArray = Array.from(files);
+        const compressedImages: string[] = [];
+        
+        for (const file of fileArray) {
+          if (!file.type.startsWith("image/")) continue;
+          if (file.size > 20 * 1024 * 1024) continue;
+          
+          try {
+            const compressedDataUrl = await compressImage(file, 768, 0.7);
+            compressedImages.push(compressedDataUrl);
+          } catch (error) {
+            console.error("Error compressing image:", error);
+          }
+        }
+        
+        // Add all images at once to avoid race conditions
+        if (compressedImages.length > 0) {
+          setUploadedImages((prev) => [...prev, ...compressedImages]);
+          setOriginalUploads((prev) => [...prev, ...compressedImages]); // Track original uploads
+          setGenerationError(null);
+        }
       }
     },
-    [processFile]
+    [compressImage]
   );
 
   const handleDragOver = useCallback((e: DragEvent) => {
@@ -1394,8 +1369,8 @@ export default function DesignerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           prompt: effectivePrompt,
-          // Only send first image to keep payload under Vercel's 4.5MB limit
-          images: uploadedImages.length > 0 ? [uploadedImages[0]] : undefined,
+          // Send all images for better context (images are compressed)
+          images: uploadedImages.length > 0 ? uploadedImages : undefined,
           roomName: selectedRoom?.name,
         }),
       });
@@ -1408,9 +1383,8 @@ export default function DesignerPage() {
 
       if (data.design) {
         setDesignJSON(data.design);
-        autoExpandCategories(data.design);
         setPrompt(""); // Clear prompt after success
-        setRenderedImage(null); // Clear previous render
+        setRenderedImage(null); setBeforeImage(null); // Clear previous render
         
         // Auto-save if room is selected
         if (selectedRoom) {
@@ -1442,22 +1416,14 @@ export default function DesignerPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, uploadedImages, autoExpandCategories, hasContent, designJSON, selectedRoom, renderDesignImageWithDesign]);
-
-  // Copy JSON to clipboard
-  const copyJSON = useCallback(() => {
-    navigator.clipboard.writeText(JSON.stringify(designJSON, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [designJSON]);
+  }, [prompt, uploadedImages, hasContent, designJSON, selectedRoom, renderDesignImageWithDesign]);
 
   // Clear design
   const clearDesign = useCallback(() => {
     setDesignJSON(emptyDesignJSON);
-    setJsonInput("");
-    setExpandedCategories(new Set());
     setGenerationError(null);
     setUploadedImages([]);
+    setSelectedImageIndex(0);
   }, []);
 
   const totalItems = countDesignItems(designJSON);
@@ -1493,42 +1459,15 @@ export default function DesignerPage() {
                   </div>
                 </div>
                 
-                {/* Mobile-only action buttons */}
-                <div className="flex items-center gap-2 sm:hidden">
-                  {selectedRoom && hasUnsavedChanges && (
-                    <button
-                      onClick={saveDesign}
-                      disabled={isSaving}
-                      className="p-2 text-violet-400 hover:bg-violet-500/20 rounded-lg transition-colors"
-                    >
-                      {isSaving ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Save className="w-5 h-5" />
-                      )}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded-xl font-medium text-sm transition-all",
-                      sidebarCollapsed 
-                        ? "bg-lime-400 text-black shadow-lg shadow-lime-400/20" 
-                        : "bg-zinc-800 text-zinc-300 border border-zinc-700"
-                    )}
+                {/* Mobile & Tablet: Home link only (bottom sheet handles controls) */}
+                <div className="flex lg:hidden items-center gap-2">
+                  <Link
+                    href="/"
+                    className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                    title="Home"
                   >
-                    {sidebarCollapsed ? (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        Design
-                      </>
-                    ) : (
-                      <>
-                        <X className="w-4 h-4" />
-                        Close
-                      </>
-                    )}
-                  </button>
+                    <Home className="w-5 h-5" />
+                  </Link>
                 </div>
               </div>
               
@@ -1550,8 +1489,7 @@ export default function DesignerPage() {
                     value={selectedProject?.id || ""}
                     onChange={(e) => {
                       const project = projects.find((p) => p.id === e.target.value);
-                      setSelectedProject(project || null);
-                      setSelectedRoom(null);
+                      selectProject(project || null);
                     }}
                     disabled={isLoadingProjects}
                     className={cn(
@@ -1594,7 +1532,7 @@ export default function DesignerPage() {
                               setShowNewRoomInput(true);
                             } else {
                               const room = rooms.find((r) => r.id === e.target.value);
-                              setSelectedRoom(room || null);
+                              selectRoom(room || null);
                             }
                           }}
                           disabled={isLoadingRooms}
@@ -1655,18 +1593,7 @@ export default function DesignerPage() {
             </div>
             
             {/* Right side - Action buttons (Desktop only) */}
-            <div className="hidden sm:flex items-center gap-1">
-              <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors lg:hidden"
-                title={sidebarCollapsed ? "Open panel" : "Close panel"}
-              >
-                {sidebarCollapsed ? (
-                  <PanelRight className="w-5 h-5" />
-                ) : (
-                  <PanelRightClose className="w-5 h-5" />
-                )}
-              </button>
+            <div className="hidden lg:flex items-center gap-1">
               <Link
                 href="/"
                 className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
@@ -1715,8 +1642,8 @@ export default function DesignerPage() {
         )}
 
         {/* Main Canvas Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <div className="max-w-4xl mx-auto">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <div className="max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto">
             {/* Show setup prompt if no project/room selected */}
             {!selectedProject ? (
               <div className="h-full flex flex-col items-center justify-center text-center px-4 py-8">
@@ -1755,7 +1682,7 @@ export default function DesignerPage() {
                       {projects.slice(0, 8).map((project) => (
                         <button
                           key={project.id}
-                          onClick={() => setSelectedProject(project)}
+                          onClick={() => selectProject(project)}
                           className="group flex flex-col items-center gap-2 p-3 sm:p-4 bg-zinc-900/50 hover:bg-violet-500/10 border border-zinc-800 hover:border-violet-500/50 rounded-xl transition-all hover:scale-[1.02]"
                         >
                           <div className="w-10 h-10 bg-zinc-800 group-hover:bg-violet-500/20 rounded-lg flex items-center justify-center transition-colors">
@@ -1808,7 +1735,7 @@ export default function DesignerPage() {
                               className="group relative"
                             >
                               <button
-                                onClick={() => setSelectedRoom(room)}
+                                onClick={() => selectRoom(room)}
                                 className="w-full flex flex-col items-center gap-2 p-3 sm:p-4 bg-zinc-900/50 hover:bg-lime-500/10 border border-zinc-800 hover:border-lime-500/50 rounded-xl transition-all hover:scale-[1.02]"
                               >
                                 <div className="w-10 h-10 bg-zinc-800 group-hover:bg-lime-500/20 rounded-lg flex items-center justify-center transition-colors">
@@ -1867,15 +1794,42 @@ export default function DesignerPage() {
               </div>
             ) : !hasContent && uploadedImages.length === 0 && !isGenerating ? (
               /* Empty State - Room selected but no design and no image */
-              <div className="h-full flex flex-col items-center justify-center text-center px-4 py-20">
-                <div className="w-20 h-20 bg-zinc-900 rounded-2xl flex items-center justify-center mb-4">
-                  <Palette className="w-10 h-10 text-zinc-700" />
-                </div>
+              <div className="h-full flex flex-col items-center justify-center text-center px-4 py-12">
+                {/* Upload Area */}
+                <label
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={cn(
+                    "w-full max-w-md aspect-video rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all mb-6",
+                    isDragging
+                      ? "border-lime-500 bg-lime-500/10"
+                      : "border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900/50"
+                  )}
+                >
+                  <div className="w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mb-3">
+                    <Upload className="w-8 h-8 text-zinc-500" />
+                  </div>
+                  <p className="text-zinc-300 font-medium mb-1">
+                    Drop room photos here
+                  </p>
+                  <p className="text-zinc-500 text-sm">
+                    or click to browse • Multiple images supported
+                  </p>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple={true}
+                    onChange={handleFileSelect} 
+                    className="hidden" 
+                  />
+                </label>
+
                 <h3 className="text-xl font-semibold text-white mb-2">
                   Design: {selectedRoom.name}
                 </h3>
                 <p className="text-zinc-500 max-w-md text-sm mb-6">
-                  Upload a room photo and describe your design vision. The AI will
+                  Upload room photos and describe your design vision. The AI will
                   generate a structured design concept with materials, colors,
                   and styling suggestions.
                 </p>
@@ -1903,11 +1857,11 @@ export default function DesignerPage() {
                 {/* Before/After Comparison - Large Display */}
                 {uploadedImages.length > 0 && (
                   <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
-                    {/* Image Display */}
-                    <div className="relative aspect-video w-full">
+                    {/* Image Display - Responsive height */}
+                    <div className="relative w-full aspect-[4/3] sm:aspect-video lg:min-h-[500px] xl:min-h-[600px]">
                       {renderedImage ? (
                         <Comparison
-                          firstImage={uploadedImages[0]}
+                          firstImage={beforeImage || uploadedImages[selectedImageIndex] || uploadedImages[0]}
                           secondImage={renderedImage}
                           className="w-full h-full"
                           firstImageClassName="object-contain"
@@ -1916,12 +1870,12 @@ export default function DesignerPage() {
                       ) : (
                         <div className="relative w-full h-full">
                           <img
-                            src={uploadedImages[0]}
+                            src={uploadedImages[selectedImageIndex] || uploadedImages[0]}
                             alt="Reference"
                             className="w-full h-full object-contain"
                           />
                           {isRenderingImage && (
-                            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+                            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 z-10">
                               {/* Animated rings */}
                               <div className="relative">
                                 <div className="w-16 h-16 rounded-full border-4 border-violet-500/30 animate-ping absolute inset-0" />
@@ -1951,25 +1905,73 @@ export default function DesignerPage() {
                       {/* Mobile: Stack layout */}
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          {/* Thumbnails for multiple images */}
-                          {uploadedImages.length > 1 && (
-                            <div className="flex items-center gap-2">
-                              {uploadedImages.map((img, i) => (
+                          {/* Input Images Thumbnails - Always show */}
+                          <div className="flex items-center gap-1.5">
+                            {uploadedImages.map((img, i) => (
+                              <div key={i} className="relative group">
                                 <button
-                                  key={i}
+                                  onClick={() => setSelectedImageIndex(i)}
                                   className={cn(
                                     "w-10 h-10 rounded-lg overflow-hidden border-2 transition-all",
-                                    i === 0 ? "border-violet-500" : "border-zinc-700 opacity-60 hover:opacity-100"
+                                    i === selectedImageIndex 
+                                      ? "border-lime-500 ring-2 ring-lime-500/30" 
+                                      : "border-zinc-700 opacity-70 hover:opacity-100 hover:border-zinc-500"
                                   )}
+                                  title={`Reference ${i + 1}${i === selectedImageIndex ? " (comparing)" : " - click to compare"}`}
                                 >
                                   <img src={img} alt={`Ref ${i + 1}`} className="w-full h-full object-cover" />
                                 </button>
-                              ))}
-                            </div>
-                          )}
+                                {/* Remove button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setUploadedImages(prev => prev.filter((_, idx) => idx !== i));
+                                    if (selectedImageIndex >= uploadedImages.length - 1) {
+                                      setSelectedImageIndex(Math.max(0, uploadedImages.length - 2));
+                                    }
+                                  }}
+                                  className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X className="w-2.5 h-2.5 text-white" />
+                                </button>
+                              </div>
+                            ))}
+                            {/* Add more images button */}
+                            <label className="w-10 h-10 border-2 border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg flex items-center justify-center cursor-pointer transition-colors">
+                              <Plus className="w-4 h-4 text-zinc-500" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple={true}
+                                onChange={handleFileSelect}
+                                className="hidden"
+                              />
+                            </label>
+                            {uploadedImages.length > 1 && (
+                              <span className="text-xs text-zinc-500 hidden sm:inline">
+                                {uploadedImages.length} inputs
+                              </span>
+                            )}
+                            {/* Select from history - original uploads */}
+                            {originalUploads.length > 0 && originalUploads.some(img => !uploadedImages.includes(img)) && (
+                              <>
+                                <span className="text-zinc-600 mx-1">|</span>
+                                <span className="text-[10px] text-zinc-500 mr-1">History:</span>
+                                {originalUploads.filter(img => !uploadedImages.includes(img)).slice(0, 3).map((img, i) => (
+                                  <button
+                                    key={`orig-${i}`}
+                                    onClick={() => setUploadedImages(prev => [...prev, img])}
+                                    className="w-8 h-8 rounded-lg overflow-hidden border-2 border-zinc-700 hover:border-violet-500 transition-all hover:scale-105"
+                                    title="Add original upload"
+                                  >
+                                    <img src={img} alt="" className="w-full h-full object-cover" />
+                                  </button>
+                                ))}
+                              </>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 text-sm">
-                            <span className="text-zinc-500">Before</span>
-                            <span className="text-zinc-600">→</span>
+                            <span className="text-zinc-500">→</span>
                             <span className={cn(
                               isGenerating && !hasContent ? "text-amber-400" :
                               isRenderingImage ? "text-violet-400" : 
@@ -1989,7 +1991,7 @@ export default function DesignerPage() {
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                   Rendering...
                                 </span>
-                              ) : renderedImage ? "After" : "Ready"}
+                              ) : renderedImage ? "Output" : "Ready"}
                             </span>
                           </div>
                         </div>
@@ -1997,10 +1999,27 @@ export default function DesignerPage() {
                           {renderError && (
                             <span className="text-xs text-red-400 mr-2 hidden sm:inline">{renderError}</span>
                           )}
+                          <AnnotateButton
+                            imageUrl={renderedImage || uploadedImages[selectedImageIndex] || uploadedImages[0]}
+                            onAnnotated={(annotatedUrl) => {
+                              // Replace the selected image with the annotated version
+                              setUploadedImages(prev => {
+                                const newImages = [...prev];
+                                newImages[selectedImageIndex] = annotatedUrl;
+                                return newImages;
+                              });
+                              if (renderedImage) setRenderedImage(null); setBeforeImage(null);
+                            }}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 sm:py-1.5 bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 rounded-lg transition-colors border border-violet-500/20 text-sm"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            <span className="hidden sm:inline">Annotate</span>
+                          </AnnotateButton>
                           <button
                             onClick={() => {
-                              setRenderedImage(null);
+                              setRenderedImage(null); setBeforeImage(null);
                               setUploadedImages([]);
+                              setSelectedImageIndex(0);
                             }}
                             className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 rounded-lg transition-colors"
                           >
@@ -2019,6 +2038,142 @@ export default function DesignerPage() {
                             {renderedImage ? "Re-render" : "Render"}
                           </button>
                         </div>
+                      </div>
+                    </div>
+                    
+                    {/* Prompt Box Under Image */}
+                    <div className="px-3 sm:px-4 py-3 border-t border-zinc-800 bg-zinc-900/50">
+                      <div className="flex gap-3">
+                        {/* Left: Image Upload Thumbnail */}
+                        <label className={cn(
+                          "relative flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-xl flex items-center justify-center cursor-pointer transition-all overflow-hidden",
+                          uploadedImages.length > 0 
+                            ? "border-2 border-lime-500/40 hover:border-lime-500/60" 
+                            : "bg-zinc-800 border-2 border-dashed border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800/80"
+                        )}>
+                          {uploadedImages.length > 0 ? (
+                            <>
+                              <img src={uploadedImages[selectedImageIndex] || uploadedImages[0]} alt="" className="w-full h-full object-cover" />
+                              {/* Badge showing image count */}
+                              {uploadedImages.length > 1 && (
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-lime-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
+                                  {uploadedImages.length}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <ImageLucide className="w-5 h-5 text-zinc-500" />
+                              <span className="text-[10px] text-zinc-600">Add</span>
+                            </div>
+                          )}
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            multiple={true}
+                            onChange={handleFileSelect} 
+                            className="hidden" 
+                          />
+                        </label>
+
+                        {/* Center: Prompt + Model */}
+                        <div className="flex-1 flex flex-col gap-2">
+                          {/* Prompt textarea */}
+                          <textarea
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                if ((prompt.trim() || hasContent) && !isGenerating && selectedRoom) {
+                                  generateDesign();
+                                }
+                              }
+                            }}
+                            placeholder={selectedRoom ? "Describe your design vision..." : "Select a room first"}
+                            disabled={!selectedRoom}
+                            rows={2}
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-500/50 resize-none disabled:opacity-50"
+                          />
+                          
+                          {/* Bottom row: Model selector + Quick suggestions */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* Compact Model Selector */}
+                            <div className="relative">
+                              <button
+                                onClick={() => setShowModelSelector(!showModelSelector)}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs transition-colors"
+                              >
+                                <Wand2 className="w-3 h-3 text-violet-400" />
+                                <span className="text-zinc-300 hidden sm:inline">{MODEL_OPTIONS.find(m => m.value === selectedModel)?.label}</span>
+                                <span className="text-zinc-300 sm:hidden">{MODEL_OPTIONS.find(m => m.value === selectedModel)?.label.split(' ')[0]}</span>
+                                <ChevronDown className={cn("w-3 h-3 text-zinc-500 transition-transform", showModelSelector && "rotate-180")} />
+                              </button>
+                              {showModelSelector && (
+                                <div className="absolute bottom-full left-0 mb-1 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-20 overflow-hidden">
+                                  {MODEL_OPTIONS.map((model) => (
+                                    <button
+                                      key={model.value}
+                                      onClick={() => {
+                                        setSelectedModel(model.value);
+                                        setShowModelSelector(false);
+                                      }}
+                                      className={cn(
+                                        "w-full flex items-center gap-2 px-3 py-2 text-left transition-colors text-sm",
+                                        selectedModel === model.value
+                                          ? "bg-violet-500/20 text-violet-300"
+                                          : "text-zinc-300 hover:bg-zinc-800"
+                                      )}
+                                    >
+                                      <div className={cn(
+                                        "w-2 h-2 rounded-full",
+                                        selectedModel === model.value ? "bg-violet-400" : "bg-zinc-600"
+                                      )} />
+                                      <div>
+                                        <p className="font-medium">{model.label}</p>
+                                        <p className="text-[10px] text-zinc-500">{model.description}</p>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Quick style chips */}
+                            {!prompt.trim() && (
+                              <div className="flex gap-1 flex-wrap">
+                                {["Modern", "Scandinavian", "Industrial", "Bohemian"].map((suggestion) => (
+                                  <button
+                                    key={suggestion}
+                                    onClick={() => setPrompt(suggestion + " style")}
+                                    className="px-2 py-0.5 text-[11px] bg-zinc-800/60 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 rounded transition-colors"
+                                  >
+                                    {suggestion}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: Generate Button */}
+                        <button
+                          onClick={generateDesign}
+                          disabled={(!prompt.trim() && !hasContent) || isGenerating || !selectedRoom}
+                          className={cn(
+                            "flex-shrink-0 flex items-center justify-center gap-2 px-4 h-14 sm:h-16 rounded-xl transition-all text-sm font-medium",
+                            (!prompt.trim() && !hasContent) || !selectedRoom 
+                              ? "bg-zinc-800 text-zinc-600" 
+                              : "bg-lime-400 hover:bg-lime-300 text-black"
+                          )}
+                        >
+                          {isGenerating ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-5 h-5" />
+                          )}
+                          <span className="hidden sm:inline">Generate</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2089,7 +2244,7 @@ export default function DesignerPage() {
                         Analyzing...
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {[1, 2, 3, 4, 5, 6].map((i) => (
                         <div
                           key={i}
@@ -2135,7 +2290,7 @@ export default function DesignerPage() {
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {/* Shell items */}
                       {Object.entries(designJSON.shell).flatMap(([category, data]) =>
                         data.items.map((item) => (
@@ -2336,473 +2491,6 @@ export default function DesignerPage() {
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* ============================================ */}
-      {/* RIGHT SIDEBAR - Mobile overlay / Desktop always visible */}
-      {/* ============================================ */}
-      {/* Mobile backdrop */}
-      {!sidebarCollapsed && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setSidebarCollapsed(true)}
-        />
-      )}
-      <div
-        className={cn(
-          "fixed lg:relative inset-y-0 right-0 z-50 lg:z-auto",
-          "bg-zinc-950 lg:bg-black/40 border-l border-white/5 flex flex-col",
-          "transition-all duration-300 ease-in-out",
-          "w-full sm:w-[420px] lg:w-[420px] lg:flex-shrink-0",
-          // Mobile: slide in/out based on collapsed state
-          // Desktop (lg:): always visible
-          sidebarCollapsed 
-            ? "translate-x-full lg:translate-x-0" 
-            : "translate-x-0"
-        )}
-      >
-        {/* Design Structure Viewer */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Header */}
-          <div className="p-4 lg:p-5 border-b border-white/5">
-            {/* Mobile close button */}
-            <div className="flex items-center justify-between mb-3 lg:hidden">
-              <span className="text-lg font-semibold text-white">Design Panel</span>
-              <button
-                onClick={() => setSidebarCollapsed(true)}
-                className="p-2 -mr-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Tag className="w-4 h-4 text-lime-400" />
-                <span className="text-sm font-medium text-white">
-                  Design Elements
-                </span>
-                {hasContent && (
-                  <span className="text-xs text-zinc-500">({totalItems})</span>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setShowJsonInput(!showJsonInput)}
-                  className={cn(
-                    "p-1.5 rounded-lg transition-colors",
-                    showJsonInput
-                      ? "bg-lime-400/20 text-lime-400"
-                      : "text-zinc-500 hover:text-white hover:bg-zinc-800"
-                  )}
-                  title="Import JSON"
-                >
-                  <FileJson className="w-4 h-4" />
-                </button>
-                {hasContent && (
-                  <>
-                    <button
-                      onClick={copyJSON}
-                      className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                      title="Copy JSON"
-                    >
-                      {copied ? (
-                        <Check className="w-4 h-4 text-lime-400" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-                    <button
-                      onClick={clearDesign}
-                      className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                      title="Clear design"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* JSON Input */}
-            {showJsonInput && (
-              <div className="space-y-2">
-                <textarea
-                  value={jsonInput}
-                  onChange={(e) => setJsonInput(e.target.value)}
-                  placeholder="Paste your design JSON here..."
-                  className="w-full h-32 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-lime-500/50 resize-none font-mono"
-                />
-                {parseError && (
-                  <p className="text-xs text-red-400">{parseError}</p>
-                )}
-                <button
-                  onClick={parseJSON}
-                  disabled={!jsonInput.trim()}
-                  className={cn(
-                    "w-full py-2 rounded-lg text-sm font-medium transition-colors",
-                    jsonInput.trim()
-                      ? "bg-lime-400 text-black hover:bg-lime-300"
-                      : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                  )}
-                >
-                  Parse JSON
-                </button>
-              </div>
-            )}
-
-            {/* Meta Info */}
-            {!showJsonInput && hasContent && designJSON.meta.title && (
-              <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800">
-                <h3 className="text-sm font-semibold text-white mb-1">
-                  {designJSON.meta.title}
-                </h3>
-                {designJSON.meta.summary && (
-                  <p className="text-xs text-zinc-400 mb-2">
-                    {designJSON.meta.summary}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-1 items-center">
-                  {designJSON.meta.style_tags.map((tag, i) => (
-                    <TagBadge
-                      key={i}
-                      label={tag}
-                      variant="style"
-                      editable
-                      onEdit={(newValue) => {
-                        const newTags = [...designJSON.meta.style_tags];
-                        newTags[i] = newValue;
-                        updateStyleTags(newTags);
-                      }}
-                      onRemove={() => {
-                        const newTags = designJSON.meta.style_tags.filter(
-                          (_, idx) => idx !== i
-                        );
-                        updateStyleTags(newTags);
-                      }}
-                    />
-                  ))}
-                  <AddTagInput
-                    variant="style"
-                    placeholder="Add style..."
-                    onAdd={(value) => {
-                      updateStyleTags([...designJSON.meta.style_tags, value]);
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Categories */}
-          <div className="flex-1 overflow-y-auto">
-            {!hasContent && !showJsonInput ? (
-              <div className="p-4 text-center">
-                <p className="text-sm text-zinc-500">
-                  No design elements yet. Enter a prompt below to generate a
-                  design concept.
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Shell Section */}
-                <div className="border-b border-white/5">
-                  <button
-                    onClick={() => toggleSection("shell")}
-                    className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors"
-                  >
-                    {expandedSections.has("shell") ? (
-                      <ChevronDown className="w-4 h-4 text-zinc-500" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-zinc-500" />
-                    )}
-                    <Box className="w-4 h-4 text-amber-400" />
-                    <span className="text-sm font-semibold text-zinc-200">
-                      Shell
-                    </span>
-                    <span className="text-xs text-zinc-600 ml-auto">
-                      Structure & Architecture
-                    </span>
-                  </button>
-
-                  {expandedSections.has("shell") && (
-                    <div className="bg-zinc-900/20">
-                      {Object.entries(designJSON.shell).map(([key, value]) => (
-                        <CategorySection
-                          key={key}
-                          name={key}
-                          category={value}
-                          isExpanded={expandedCategories.has(key)}
-                          onToggle={() => toggleCategory(key)}
-                          onUpdateMaterialsOverall={(materials) =>
-                            updateMaterialsOverall("shell", key, materials)
-                          }
-                          onAddMaterial={(material) =>
-                            addMaterialToCategory("shell", key, material)
-                          }
-                          onRemoveMaterial={(material) =>
-                            removeMaterialFromCategory("shell", key, material)
-                          }
-                          onUpdateItem={(itemId, updates) =>
-                            updateItem("shell", key, itemId, updates)
-                          }
-                          onDeleteItem={(itemId) =>
-                            deleteItem("shell", key, itemId)
-                          }
-                          onRenameCategory={(newName) =>
-                            renameCategory("shell", key, newName)
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Interior Section */}
-                <div>
-                  <button
-                    onClick={() => toggleSection("interior")}
-                    className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors"
-                  >
-                    {expandedSections.has("interior") ? (
-                      <ChevronDown className="w-4 h-4 text-zinc-500" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-zinc-500" />
-                    )}
-                    <Sofa className="w-4 h-4 text-violet-400" />
-                    <span className="text-sm font-semibold text-zinc-200">
-                      Interior
-                    </span>
-                    <span className="text-xs text-zinc-600 ml-auto">
-                      Furniture & Decor
-                    </span>
-                  </button>
-
-                  {expandedSections.has("interior") && (
-                    <div className="bg-zinc-900/20">
-                      {Object.entries(designJSON.interior).map(
-                        ([key, value]) => (
-                          <CategorySection
-                            key={key}
-                            name={key}
-                            category={value}
-                            isExpanded={expandedCategories.has(key)}
-                            onToggle={() => toggleCategory(key)}
-                            onUpdateMaterialsOverall={(materials) =>
-                              updateMaterialsOverall("interior", key, materials)
-                            }
-                            onAddMaterial={(material) =>
-                              addMaterialToCategory("interior", key, material)
-                            }
-                            onRemoveMaterial={(material) =>
-                              removeMaterialFromCategory("interior", key, material)
-                            }
-                            onUpdateItem={(itemId, updates) =>
-                              updateItem("interior", key, itemId, updates)
-                            }
-                            onDeleteItem={(itemId) =>
-                              deleteItem("interior", key, itemId)
-                            }
-                            onRenameCategory={(newName) =>
-                              renameCategory("interior", key, newName)
-                            }
-                          />
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Image Upload & Prompt Input */}
-        <div className="p-4 lg:p-5 border-t border-white/5 space-y-4 pb-safe">
-          {/* Error display */}
-          {generationError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-red-400">{generationError}</p>
-            </div>
-          )}
-
-          {/* Image Upload Section */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-zinc-300">Reference Images</span>
-              {uploadedImages.length > 0 && (
-                <span className="text-xs text-zinc-500">{uploadedImages.length} image{uploadedImages.length > 1 ? 's' : ''}</span>
-              )}
-            </div>
-            
-            {/* Uploaded Images Preview */}
-            {uploadedImages.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {uploadedImages.map((img, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={img}
-                      alt={`Reference ${index + 1}`}
-                      className="w-16 h-16 object-cover rounded-lg border border-zinc-700"
-                    />
-                    <button
-                      onClick={() => removeImage(index)}
-                      className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-lg"
-                    >
-                      <X className="w-3.5 h-3.5 text-white" />
-                    </button>
-                  </div>
-                ))}
-                
-                {/* Add more button */}
-                <label className="w-16 h-16 border-2 border-dashed border-zinc-700 hover:border-zinc-600 rounded-lg flex items-center justify-center cursor-pointer transition-colors">
-                  <Plus className="w-5 h-5 text-zinc-500" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            )}
-
-            {/* Drop Zone (shown when no images) */}
-            {uploadedImages.length === 0 && (
-              <label
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                className={cn(
-                  "flex items-center gap-3 p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                  isDragging
-                    ? "border-lime-500 bg-lime-500/10"
-                    : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/50"
-                )}
-              >
-                <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <ImageIcon className="w-5 h-5 text-zinc-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-zinc-300">Add room photos</p>
-                  <p className="text-xs text-zinc-500">Drop images or click to browse</p>
-                </div>
-                <Upload className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
-
-          {/* Prompt Input */}
-          <div>
-            <div className="mb-2">
-              <span className="text-sm font-medium text-zinc-300">Prompt</span>
-            </div>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && prompt.trim() && !isGenerating) {
-                  e.preventDefault();
-                  generateDesign();
-                }
-              }}
-              placeholder={uploadedImages.length > 0 
-                ? "Describe how you want to style this space..."
-                : "Describe your design vision... e.g., 'Modern minimalist living room'"}
-              className="w-full h-20 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-lime-500/50 resize-none"
-              disabled={isGenerating}
-            />
-          </div>
-
-          {/* Model Selector - Collapsible */}
-          <div>
-            <button
-              onClick={() => setShowModelSelector(!showModelSelector)}
-              className="w-full flex items-center justify-between py-2 text-left group"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-zinc-300">Render Model</span>
-                <span className="text-xs text-zinc-500">•</span>
-                <span className="text-xs text-violet-400">{MODEL_OPTIONS.find(m => m.value === selectedModel)?.label}</span>
-              </div>
-              <ChevronDown className={cn(
-                "w-4 h-4 text-zinc-500 transition-transform",
-                showModelSelector && "rotate-180"
-              )} />
-            </button>
-            {showModelSelector && (
-              <div className="grid grid-cols-1 gap-2 mt-2">
-                {MODEL_OPTIONS.map((model) => (
-                  <button
-                    key={model.value}
-                    onClick={() => {
-                      setSelectedModel(model.value);
-                      setShowModelSelector(false);
-                    }}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all",
-                      selectedModel === model.value
-                        ? "bg-violet-500/20 border border-violet-500/50"
-                        : "bg-zinc-900 border border-zinc-800 hover:border-zinc-700"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-3 h-3 rounded-full border-2",
-                      selectedModel === model.value
-                        ? "border-violet-400 bg-violet-400"
-                        : "border-zinc-600"
-                    )} />
-                    <div className="flex-1 min-w-0">
-                      <p className={cn(
-                        "text-sm font-medium",
-                        selectedModel === model.value ? "text-violet-300" : "text-zinc-300"
-                      )}>
-                        {model.label}
-                      </p>
-                      <p className="text-xs text-zinc-500 truncate">{model.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Generate Button - enabled if has prompt OR has existing content to regenerate */}
-          <button
-            onClick={generateDesign}
-            disabled={(!prompt.trim() && !hasContent) || isGenerating}
-            className={cn(
-              "w-full py-3.5 sm:py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all text-base sm:text-sm",
-              (!prompt.trim() && !hasContent) || isGenerating
-                ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                : "bg-lime-400 text-black hover:bg-lime-300 active:bg-lime-500 shadow-lg shadow-lime-400/20"
-            )}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-5 h-5" />
-                {hasContent && !prompt.trim() ? "Regenerate Design" : "Generate Design"}
-                {uploadedImages.length > 0 && (
-                  <span className="text-xs opacity-75">({uploadedImages.length} image{uploadedImages.length > 1 ? 's' : ''})</span>
-                )}
-              </>
-            )}
-          </button>
         </div>
       </div>
 
