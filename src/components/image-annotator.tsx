@@ -835,45 +835,47 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
       // Deselect before saving
       setSelectedActionId(null);
 
-    // Create a new canvas to composite image + annotations
-    const exportCanvas = document.createElement("canvas");
-    
-    // Limit canvas size to prevent "image too large" errors
-    // Max dimension of 4096px to stay within reasonable limits
-    const MAX_DIMENSION = 4096;
-    let exportWidth = imageDimensions.width;
-    let exportHeight = imageDimensions.height;
-    
-    if (exportWidth > MAX_DIMENSION || exportHeight > MAX_DIMENSION) {
-      const scale = Math.min(MAX_DIMENSION / exportWidth, MAX_DIMENSION / exportHeight);
-      exportWidth = Math.floor(exportWidth * scale);
-      exportHeight = Math.floor(exportHeight * scale);
-    }
-    
-    exportCanvas.width = exportWidth;
-    exportCanvas.height = exportHeight;
-    const exportCtx = exportCanvas.getContext("2d");
-    
-    if (!exportCtx) return;
+      // Create a new canvas to composite image + annotations
+      const exportCanvas = document.createElement("canvas");
+      
+      // Limit canvas size to prevent "image too large" errors
+      // Max dimension of 4096px to stay within reasonable limits
+      const MAX_DIMENSION = 4096;
+      let exportWidth = imageDimensions.width;
+      let exportHeight = imageDimensions.height;
+      
+      if (exportWidth > MAX_DIMENSION || exportHeight > MAX_DIMENSION) {
+        const scale = Math.min(MAX_DIMENSION / exportWidth, MAX_DIMENSION / exportHeight);
+        exportWidth = Math.floor(exportWidth * scale);
+        exportHeight = Math.floor(exportHeight * scale);
+      }
+      
+      exportCanvas.width = exportWidth;
+      exportCanvas.height = exportHeight;
+      const exportCtx = exportCanvas.getContext("2d");
+      
+      if (!exportCtx) {
+        setIsSaving(false);
+        return;
+      }
 
-    // Scale and draw original image
-    exportCtx.drawImage(imageRef.current, 0, 0, exportWidth, exportHeight);
-    
-    // Draw annotations on top (without selection highlight)
-    // Scale annotation coordinates if canvas was resized
-    const scaleX = exportWidth / imageDimensions.width;
-    const scaleY = exportHeight / imageDimensions.height;
-    
-    exportCtx.lineCap = "round";
-    exportCtx.lineJoin = "round";
-    exportCtx.save();
-    exportCtx.scale(scaleX, scaleY);
-    actions.forEach(action => drawAction(exportCtx, action, false));
-    exportCtx.restore();
+      // Scale and draw original image
+      exportCtx.drawImage(imageRef.current, 0, 0, exportWidth, exportHeight);
+      
+      // Draw annotations on top (without selection highlight)
+      // Scale annotation coordinates if canvas was resized
+      const scaleX = exportWidth / imageDimensions.width;
+      const scaleY = exportHeight / imageDimensions.height;
+      
+      exportCtx.lineCap = "round";
+      exportCtx.lineJoin = "round";
+      exportCtx.save();
+      exportCtx.scale(scaleX, scaleY);
+      actions.forEach(action => drawAction(exportCtx, action, false));
+      exportCtx.restore();
 
-    // Convert canvas to blob and upload to Supabase
-    try {
-      await new Promise<void>((resolve, reject) => {
+      // Convert canvas to blob and upload to Supabase
+      await new Promise<void>((resolve) => {
         exportCanvas.toBlob(async (blob) => {
           try {
             if (!blob) {
@@ -923,8 +925,18 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
     } catch (error) {
       console.error("Error saving annotated image:", error);
       // Fallback to data URL if anything fails
-      const dataUrl = exportCanvas.toDataURL("image/png");
-      onSave(dataUrl);
+      if (canvasRef.current && imageRef.current) {
+        const exportCanvas = document.createElement("canvas");
+        exportCanvas.width = imageDimensions.width;
+        exportCanvas.height = imageDimensions.height;
+        const exportCtx = exportCanvas.getContext("2d");
+        if (exportCtx) {
+          exportCtx.drawImage(imageRef.current, 0, 0);
+          actions.forEach(action => drawAction(exportCtx, action, false));
+          const dataUrl = exportCanvas.toDataURL("image/png");
+          onSave(dataUrl);
+        }
+      }
     } finally {
       setIsSaving(false);
     }
