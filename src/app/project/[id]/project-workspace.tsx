@@ -439,6 +439,18 @@ export default function ProjectWorkspace() {
     // Run generation in background - don't await at top level
     (async () => {
       try {
+        // Upload data URLs to Supabase before sending to API to prevent "request too large" errors
+        let uploadedInputImages = currentInputImages;
+        if (currentInputImages.length > 0) {
+          const { uploadDataUrlsToSupabase } = await import("@/lib/image-utils");
+          try {
+            uploadedInputImages = await uploadDataUrlsToSupabase(currentInputImages, "inputs");
+          } catch (error) {
+            console.error("Failed to upload input images, proceeding with originals:", error);
+            // Continue with original images if upload fails (they might already be URLs)
+          }
+        }
+
         // Build request body based on model
         const requestBody: Record<string, unknown> = {
           prompt: currentPrompt,
@@ -448,15 +460,15 @@ export default function ProjectWorkspace() {
         };
 
         if (currentModel === "nano-banana-pro") {
-          requestBody.imageInputs = currentInputImages;
+          requestBody.imageInputs = uploadedInputImages;
           requestBody.aspectRatio = currentAspectRatio;
           requestBody.resolution = currentResolution;
         } else if (currentModel === "google-nano-banana") {
-          requestBody.imageInputs = currentInputImages;
+          requestBody.imageInputs = uploadedInputImages;
           requestBody.aspectRatio = currentAspectRatio;
         } else if (currentModel === "seedream-edit") {
           // Seedream Edit uses imageSize presets and requires image inputs
-          requestBody.imageInputs = currentInputImages;
+          requestBody.imageInputs = uploadedInputImages;
           requestBody.imageSize = currentImageSize;
         } else if (currentModel === "seedream") {
           // Seedream text-to-image uses imageSize, no image inputs

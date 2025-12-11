@@ -203,12 +203,24 @@ export default function LaunchKitPage() {
     const model = referenceImage ? "nano-banana-pro" : "seedream";
 
     try {
+      // Upload data URLs to Supabase before sending to API to prevent "request too large" errors
+      let uploadedImageInputs: string[] = [];
+      if (referenceImage) {
+        const { uploadDataUrlToSupabase } = await import("@/lib/image-utils");
+        try {
+          uploadedImageInputs = [await uploadDataUrlToSupabase(referenceImage, "launch-kit")];
+        } catch (error) {
+          console.error("Failed to upload image, using original:", error);
+          uploadedImageInputs = [referenceImage]; // Use original if upload fails
+        }
+      }
+
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: promptText || imagePrompt,
-          imageInputs: referenceImage ? [referenceImage] : [],
+          imageInputs: uploadedImageInputs,
           model,
           aspectRatio: "16:9",
           resolution: "2K",

@@ -496,13 +496,23 @@ function DrawToEditContent() {
       // Convert canvas to data URL (this includes the background + drawings)
       const dataUrl = canvas.toDataURL("image/png");
       
+      // Upload data URL to Supabase before sending to API to prevent "request too large" errors
+      const { uploadDataUrlToSupabase } = await import("@/lib/image-utils");
+      let imageUrl = dataUrl;
+      try {
+        imageUrl = await uploadDataUrlToSupabase(dataUrl, "draw-to-edit");
+      } catch (error) {
+        console.error("Failed to upload image, using data URL:", error);
+        // Continue with data URL if upload fails
+      }
+      
       // Call the generate API
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: prompt,
-          imageInputs: [dataUrl], // API expects imageInputs array
+          imageInputs: [imageUrl], // Now a Supabase URL instead of data URL
           aspectRatio: "auto",
           resolution: "2K",
           numImages: 1,
