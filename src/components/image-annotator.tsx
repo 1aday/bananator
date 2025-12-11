@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Check, Undo2, Redo2, Pencil, Type, ArrowRight, Circle, Eraser, ChevronDown, Move } from "lucide-react";
+import { X, Check, Undo2, Redo2, Pencil, Type, ArrowRight, Circle, Square, Eraser, ChevronDown, Move } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Tool = "select" | "pen" | "arrow" | "circle" | "text" | "eraser";
+type Tool = "select" | "pen" | "arrow" | "rectangle" | "circle" | "text" | "eraser";
 type HandleType = "nw" | "ne" | "sw" | "se" | "start" | "end" | null;
 
 type DrawAction = {
@@ -56,7 +56,7 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [currentTool, setCurrentTool] = useState<Tool>("pen");
+  const [currentTool, setCurrentTool] = useState<Tool>("rectangle");
   const [currentColor, setCurrentColor] = useState("#ef4444"); // Red
   const [lineWidth, setLineWidth] = useState(15); // Bigger default size
   const [actions, setActions] = useState<DrawAction[]>([]);
@@ -126,6 +126,15 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
         }
         break;
       case "arrow":
+        if (action.start && action.end) {
+          const minX = Math.min(action.start.x, action.end.x);
+          const maxX = Math.max(action.start.x, action.end.x);
+          const minY = Math.min(action.start.y, action.end.y);
+          const maxY = Math.max(action.start.y, action.end.y);
+          return { x: minX, y: minY, width: maxX - minX || 20, height: maxY - minY || 20 };
+        }
+        break;
+      case "rectangle":
         if (action.start && action.end) {
           const minX = Math.min(action.start.x, action.end.x);
           const maxX = Math.max(action.start.x, action.end.x);
@@ -257,6 +266,17 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
           context.stroke();
         }
         break;
+      case "rectangle":
+        if (action.start && action.end) {
+          const x = Math.min(action.start.x, action.end.x);
+          const y = Math.min(action.start.y, action.end.y);
+          const width = Math.abs(action.end.x - action.start.x);
+          const height = Math.abs(action.end.y - action.start.y);
+          context.beginPath();
+          context.rect(x, y, width, height);
+          context.stroke();
+        }
+        break;
       case "circle":
         if (action.start && action.end) {
           const radius = Math.sqrt(
@@ -297,6 +317,20 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
           return [
             { type: "start", x: action.start.x, y: action.start.y },
             { type: "end", x: action.end.x, y: action.end.y },
+          ];
+        }
+        break;
+      case "rectangle":
+        if (action.start && action.end) {
+          const minX = Math.min(action.start.x, action.end.x);
+          const maxX = Math.max(action.start.x, action.end.x);
+          const minY = Math.min(action.start.y, action.end.y);
+          const maxY = Math.max(action.start.y, action.end.y);
+          return [
+            { type: "nw", x: minX, y: minY },
+            { type: "ne", x: maxX, y: minY },
+            { type: "sw", x: minX, y: maxY },
+            { type: "se", x: maxX, y: maxY },
           ];
         }
         break;
@@ -392,6 +426,7 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
           }
           break;
         case "arrow":
+        case "rectangle":
         case "circle":
           if (action.start && action.end) {
             return {
@@ -430,6 +465,35 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
           }
           if (handle === "end" && initial.start) {
             return { ...action, end: currentPos };
+          }
+          break;
+
+        case "rectangle":
+          // Drag corner to resize - opposite corner stays fixed
+          if (initial.start && initial.end) {
+            const initialMinX = Math.min(initial.start.x, initial.end.x);
+            const initialMaxX = Math.max(initial.start.x, initial.end.x);
+            const initialMinY = Math.min(initial.start.y, initial.end.y);
+            const initialMaxY = Math.max(initial.start.y, initial.end.y);
+            
+            let newStart = { ...action.start! };
+            let newEnd = { ...action.end! };
+            
+            if (handle === "nw") {
+              newStart = { x: currentPos.x, y: currentPos.y };
+              newEnd = { x: initialMaxX, y: initialMaxY };
+            } else if (handle === "ne") {
+              newStart = { x: initialMinX, y: currentPos.y };
+              newEnd = { x: currentPos.x, y: initialMaxY };
+            } else if (handle === "sw") {
+              newStart = { x: currentPos.x, y: initialMinY };
+              newEnd = { x: initialMaxX, y: currentPos.y };
+            } else if (handle === "se") {
+              newStart = { x: initialMinX, y: initialMinY };
+              newEnd = { x: currentPos.x, y: currentPos.y };
+            }
+            
+            return { ...action, start: newStart, end: newEnd };
           }
           break;
 
@@ -818,9 +882,10 @@ export function InlineAnnotator({ imageUrl, onSave, onCancel, className }: Inlin
 
   const tools = [
     { id: "select" as Tool, icon: Move, label: "Select, Move & Resize" },
-    { id: "pen" as Tool, icon: Pencil, label: "Draw" },
-    { id: "arrow" as Tool, icon: ArrowRight, label: "Arrow" },
+    { id: "rectangle" as Tool, icon: Square, label: "Rectangle" },
     { id: "circle" as Tool, icon: Circle, label: "Circle" },
+    { id: "arrow" as Tool, icon: ArrowRight, label: "Arrow" },
+    { id: "pen" as Tool, icon: Pencil, label: "Draw" },
     { id: "text" as Tool, icon: Type, label: "Text" },
     { id: "eraser" as Tool, icon: Eraser, label: "Eraser" },
   ];

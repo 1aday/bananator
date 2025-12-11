@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -643,7 +643,7 @@ function countDesignItems(design: DesignJSON): number {
   return count;
 }
 
-export default function DesignerPage() {
+function DesignerPageContent() {
   // URL state management
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2509,5 +2509,26 @@ export default function DesignerPage() {
         variant="danger"
       />
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function DesignerPageLoading() {
+  return (
+    <div className="h-screen bg-zinc-950 text-white flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-lime-400" />
+        <p className="text-zinc-400">Loading designer...</p>
+      </div>
+    </div>
+  );
+}
+
+// Wrap in Suspense for useSearchParams
+export default function DesignerPage() {
+  return (
+    <Suspense fallback={<DesignerPageLoading />}>
+      <DesignerPageContent />
+    </Suspense>
   );
 }
