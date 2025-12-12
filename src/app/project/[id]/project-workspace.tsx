@@ -154,16 +154,30 @@ export default function ProjectWorkspace() {
   
   // Check if cached images are already loaded on mount
   useEffect(() => {
-    generations.forEach(gen => {
-      if (gen.outputImage && !loadedImages.has(gen.id)) {
-        const img = new Image();
-        img.src = gen.outputImage;
-        // If image is already cached/complete, mark it as loaded
-        if (img.complete) {
-          handleImageLoaded(gen.id);
-        }
+    let cancelled = false;
+
+    generations.forEach((gen) => {
+      if (!gen.outputImage || loadedImages.has(gen.id)) return;
+
+      const img = new Image();
+      img.onload = () => {
+        if (!cancelled) handleImageLoaded(gen.id);
+      };
+      img.onerror = () => {
+        // Don't keep the feed blocked forever if an image fails to load.
+        if (!cancelled) handleImageLoaded(gen.id);
+      };
+      img.src = gen.outputImage;
+
+      // If image is already cached/complete, mark it as loaded immediately.
+      if (img.complete) {
+        if (!cancelled) handleImageLoaded(gen.id);
       }
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [generations, loadedImages, handleImageLoaded]);
 
   // Handle sheet drag gestures

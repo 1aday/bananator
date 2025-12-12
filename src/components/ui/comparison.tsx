@@ -38,24 +38,44 @@ export function Comparison({
 
   // Preload both images in parallel when they change
   React.useEffect(() => {
+    let cancelled = false;
+
     setBeforeLoaded(false);
     setAfterLoaded(false);
-    
-    if (beforeImage) {
+
+    const preload = (
+      url: string | undefined,
+      markLoaded: React.Dispatch<React.SetStateAction<boolean>>
+    ) => {
+      if (!url) {
+        markLoaded(true);
+        return;
+      }
+
       const img = new Image();
-      img.onload = () => setBeforeLoaded(true);
-      img.src = beforeImage;
-    } else {
-      setBeforeLoaded(true);
-    }
-    
-    if (afterImage) {
-      const img = new Image();
-      img.onload = () => setAfterLoaded(true);
-      img.src = afterImage;
-    } else {
-      setAfterLoaded(true);
-    }
+      img.onload = () => {
+        if (!cancelled) markLoaded(true);
+      };
+      img.onerror = () => {
+        // Don't let the component get stuck in loading forever.
+        // If an image fails to load, we still allow the comparison UI to render.
+        if (!cancelled) markLoaded(true);
+      };
+
+      img.src = url;
+
+      // Fast-path for cached images (some browsers can complete immediately)
+      if (img.complete && img.naturalWidth > 0) {
+        if (!cancelled) markLoaded(true);
+      }
+    };
+
+    preload(beforeImage, setBeforeLoaded);
+    preload(afterImage, setAfterLoaded);
+
+    return () => {
+      cancelled = true;
+    };
   }, [beforeImage, afterImage]);
 
   const updatePosition = React.useCallback((clientX: number) => {

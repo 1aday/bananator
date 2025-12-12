@@ -68,3 +68,4 @@ export async function uploadDataUrlsToSupabase(
 
   return Promise.all(uploadPromises);
 }
+
